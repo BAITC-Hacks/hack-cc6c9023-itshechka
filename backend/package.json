@@ -1,0 +1,13 @@
+{
+  "name": "hackalem",
+  "private": true,
+  "scripts": {
+    "dev:api": "pnpm --filter @hackalem/api start:dev",
+    "build": "pnpm -r build",
+    "prisma:migrate": "pnpm --filter @hackalem/api prisma:migrate",
+    "prisma:seed": "pnpm --filter @hackalem/api prisma:seed"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

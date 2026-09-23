@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SourceType {
+  FILE
+  LIVE
+}
+
+enum MeetingStatus {
+  UPLOADED
+  RECORDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  OVERDUE
+}
+
+enum ExportFormat {
+  PDF
+  DOCX
+}
+
+model Meeting {
+  id           String        @id @default(cuid())
+  title        String
+  organization String?
+  sourceType   SourceType
+  status       MeetingStatus @default(UPLOADED)
+  audioUrl     String?
+  durationSec  Int?
+  createdAt    DateTime      @default(now())
+
+  participants Participant[]
+  utterances   Utterance[]
+  topics       Topic[]
+  tasks        Task[]
+  summaries    Summary[]
+  exports      Export[]
+
+  @@map("meetings")
+}
+
+model Participant {
+  id         String  @id @default(cuid())
+  meetingId  String
+  meeting    Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  speakerTag String
+  fullName   String?
+  role       String?
+
+  utterances       Utterance[]
+  tasksResponsible Task[]      @relation("responsible")
+
+  @@unique([meetingId, speakerTag])
+  @@map("participants")
+}
+
+model Topic {
+  id         String  @id @default(cuid())
+  meetingId  String
+  meeting    Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  title      String
+  order      Int
+  startOrder Int? // Utterance.order диапазона, относящегося к теме (для группировки в export)
+  endOrder   Int?
+
+  tasks     Task[]
+  summaries Summary[]
+
+  @@map("topics")
+}
+
+model Utterance {
+  id            String       @id @default(cuid())
+  meetingId     String
+  meeting       Meeting      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  participantId String?
+  participant   Participant? @relation(fields: [participantId], references: [id])
+  text          String
+  startMs       Int
+  endMs         Int
+  order         Int
+
+  @@index([meetingId, order])
+  @@map("utterances")
+}
+
+model Task {
+  id                String       @id @default(cuid())
+  meetingId         String
+  meeting           Meeting      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  topicId           String?
+  topic             Topic?       @relation(fields: [topicId], references: [id])
+  description       String
+  responsibleId     String?
+  responsible       Participant? @relation("responsible", fields: [responsibleId], references: [id])
+  responsibleRaw    String?
+  dueDate           DateTime?
+  dueRaw            String?
+  status            TaskStatus   @default(OPEN)
+  sourceUtteranceId String?
+  createdAt         DateTime     @default(now())
+
+  @@map("tasks")
+}
+
+model Summary {
+  id        String  @id @default(cuid())
+  meetingId String
+  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  topicId   String?
+  topic     Topic?  @relation(fields: [topicId], references: [id])
+  text      String
+
+  @@map("summaries")
+}
+
+model Export {
+  id        String       @id @default(cuid())
+  meetingId String
+  meeting   Meeting      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  format    ExportFormat
+  fileUrl   String
+  createdAt DateTime     @default(now())
+
+  @@map("exports")
+}

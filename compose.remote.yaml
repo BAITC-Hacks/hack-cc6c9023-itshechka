@@ -5,6 +5,8 @@ services:
   api:
     image: hackalem-api:deploy
     ports: !reset []
+    environment:
+      NODE_ENV: production
 
   web:
     image: hackalem-web:deploy

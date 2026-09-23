@@ -11,10 +11,12 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--identity", required=True, help="Path to an SSH private key")
     parser.add_argument("--target", required=True, help="SSH target, for example root@server")
+    parser.add_argument("--image", action="append", help="Image to transfer (repeatable); defaults to API and web")
     args = parser.parse_args()
 
+    images = args.image or ["hackalem-api:deploy", "hackalem-web:deploy"]
     sender = subprocess.Popen(
-        ["docker", "save", "hackalem-api:deploy", "hackalem-web:deploy"],
+        ["docker", "save", *images],
         stdout=subprocess.PIPE,
     )
     receiver = subprocess.Popen(

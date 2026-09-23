@@ -11,7 +11,6 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { ConflictError, NotFoundError, ValidationError } from "../../common/api-error";
 import { serializeMeeting } from "../../common/serialize";
 import type { Env } from "../../config/env.schema";
-import type { Env } from "../../config/env.schema";
 
 @Injectable()
 export class MeetingsService {
@@ -97,6 +96,22 @@ export class MeetingsService {
       await fs.unlink(filePath);
       throw error;
     }
+  }
+
+  async getAudioPath(id: string) {
+    const meeting = await this.getOrThrow(id);
+    const storageRoot = path.resolve(this.config.get("AUDIO_STORAGE_DIR", { infer: true }));
+    const audioPath = meeting.audioUrl ? path.resolve(meeting.audioUrl) : null;
+    const relative = audioPath ? path.relative(storageRoot, audioPath) : null;
+    if (!audioPath || !relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new NotFoundError("Meeting audio", id);
+    }
+    try {
+      if (!(await fs.stat(audioPath)).isFile()) throw new Error("Not a file");
+    } catch {
+      throw new NotFoundError("Meeting audio", id);
+    }
+    return audioPath;
   }
 
   /** Live-поток: клиент завершил запись — переводим встречу в PROCESSING как только есть финальный audioUrl. */

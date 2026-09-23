@@ -24,7 +24,7 @@
 corepack pnpm install
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
-docker compose up -d
+docker compose up -d postgres
 corepack pnpm prisma:generate
 corepack pnpm --filter @hackalem/api exec prisma migrate deploy
 corepack pnpm prisma:seed
@@ -35,6 +35,30 @@ corepack pnpm dev
 - API: `http://localhost:4000/api/v1`
 - Swagger: `http://localhost:4000/api/docs`
 - Health: `http://localhost:4000/api/v1/health`
+
+### Запуск целиком в Docker
+
+```bash
+docker compose up -d --build
+docker compose exec api pnpm prisma:seed
+docker compose ps
+```
+
+Compose запускает PostgreSQL, API и web, применяет миграции при старте API и сохраняет базу и загруженные файлы в Docker volumes. Сайт доступен на `http://localhost:3000`, API — на `http://localhost:4000/api/v1`. Повторный seed обновляет демо-аккаунты и демо-встречу. Для остановки: `docker compose down` (данные в volumes сохраняются).
+
+### Демо на отдельном сервере
+
+Публичный адрес текущего развёртывания: `http://46.225.138.70:3001`. На сервере проект лежит в `/opt/hackalem`; только gateway публикует порт `3001`, API, web и PostgreSQL доступны внутри отдельной Docker-сети. Порты существующих сайтов `80/443/3000` не меняются.
+
+Для повторного запуска на сервере:
+
+```bash
+cd /opt/hackalem
+docker compose -f compose.yaml -f compose.remote.yaml up -d --no-build --pull never
+docker compose -f compose.yaml -f compose.remote.yaml ps
+```
+
+Перед первым запуском `deploy/setup-remote.sh` создаёт закрытый `.env` со случайными секретами. Готовые образы передаются скриптом `deploy/push-images.py`; web-образ нужно собирать с `NEXT_PUBLIC_API_URL=http://46.225.138.70:3001/api/v1`. Для HTTPS нужен отдельный домен и маршрут в nginx.
 
 ### Доступ для демонстрации
 

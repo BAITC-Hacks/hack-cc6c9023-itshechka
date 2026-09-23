@@ -1,40 +1,234 @@
-# ML worker
+# HackAlem: локальная ML-часть протоколирования
 
-`POST /process` принимает внутренний контракт `AiProcessRequest`: скачивает запись из API, приводит её к mono 16 kHz, распознаёт локальным faster-whisper, при наличии `HF_TOKEN` размечает спикеров pyannote и передаёт только транскрипт в OpenAI для тем, саммари и поручений. Результат отправляется в callback backend. При ошибке worker вызывает `/failed`, встреча получает статус `FAILED`.
+Рекомендуемый проект для хакатона: **локальный секретарь с проверяемыми поручениями**. Пользователь загружает запись, подтверждает имена голосов, получает транскрипт и карточки «что сделать — кто — срок — цитата — момент записи». Секретарь проверяет карточки и сохраняет протокол.
 
-## Локальный запуск
+Это комплект **ML-кода, данных, обучения и проверок**, а не готовый бот для Zoom/Teams. Основной результат для backend — JSON. В комплекте есть простой Markdown/HTML-экспорт; HTML можно сохранить в PDF через печать браузера. Автоматический DOCX/PDF-рендерер и интерфейс согласования команда добавляет на уровне приложения.
 
-```bash
-python3 -m venv ml/.venv
-ml/.venv/bin/pip install -r ml/requirements.txt
-cp ml/.env.example ml/.env
-# Укажите OPENAI_API_KEY, AI_WORKER_TOKEN и API_BASE_URL в ml/.env.
-# Тот же AI_WORKER_TOKEN укажите в apps/api/.env.
-cd ml
-.venv/bin/uvicorn worker:app --host 127.0.0.1 --port 5000
+## Что действительно выполнено
+
+- Из двух предоставленных протоколов выделены 60 реплик и 16 эталонных поручений из таблиц авторов. Саммари/таблицы не подмешиваются во вход извлечения.
+- Сгенерированы 657 текстовых примеров: 498 train, 81 validation, 78 test; языки ru/kk/mixed. Шаблоны, имена и темы разделены между выборками. Казахские формулировки требуют проверки носителем языка.
+- Обучен **вспомогательный** TF-IDF + Logistic Regression детектор реплик с поручениями. Модель уже в `models/action_detector.json`; её применение не требует sklearn и интернета.
+- Реализованы загрузка моделей, локальное ASR, диаризация, привязка слов к голосам, извлечение поручений локальной LLM, проверка цитат, обработка сроков и упаковка ZIP.
+- Точные результаты выполненных проверок — в `reports/verification.json`, метрики обучения — в `reports/training_metrics.json`.
+
+**Полный аудиопайплайн пока не проверен.** Локальная `faster-whisper-small` уже распознала оба реальных MP3; измерения приведены в `../docs/ml-audio-smoke.md`. Community-1 недоступна без принятия условий доступа к весам, Ollama и извлечение поручений проверяются отдельно. Большие веса не входят в Git. Нет измеренной DER и качества реального извлечения. Тест API-контракта LLM использует заглушку и не доказывает качество модели.
+
+## Архитектура
+
+```text
+MP3/WAV -> faster-whisper (ASR, слова + время)
+        -> pyannote Community-1 (анонимные голоса)
+        -> word-overlap alignment + подтверждённая карта имён
+        -> Qwen3 4B Instruct / локальная Ollama (весь диалог)
+        -> проверка JSON, дословных цитат и дат
+        -> result.json -> backend / карточки / экспорт
+
+Вспомогательный обученный детектор -> подсветка реплик для секретаря
 ```
 
-Backend должен иметь `AI_WORKER_URL=http://127.0.0.1:5000`, `PUBLIC_API_URL=http://localhost:4000/api/v1`, `AI_DEMO_FALLBACK=false`. Для первого прогона на CPU можно выбрать `WHISPER_MODEL=small`; после проверки качества — `large-v3-turbo`. Веса загружаются при первом запросе в `ml/models/hf` (игнорируется Git). `ffmpeg` должен быть доступен в PATH.
+Детектор **не отбрасывает** реплики перед LLM: «согласен», исправление даты или имя из предыдущей реплики могут быть критичны. Он не определяет исполнителя, срок или число уникальных поручений. Самостоятельно он обязательный минимум кейса не закрывает.
 
-Для преимущественно казахской записи выберите язык `Қазақша`: тогда Whisper получает `language=kk`. При установленном `WHISPER_KZ_MODEL` этот режим использует отдельную модель. Смешанный режим определяет язык по 10-секундным окнам и объединяет соседние окна одного языка; казахские фрагменты тоже проходят через специализированную модель. На CPU это медленнее. Речь распознаётся локально и даёт кириллический транскрипт, затем GPT API составляет итог на казахском. Неразборчивые слова могут быть записаны приблизительно: анализу запрещено превращать догадку в подтверждённый факт.
+## Быстрая проверка: Python 3.11, без установки библиотек
 
-Пилотный скрипт `train_asr.py` предназначен для дообучения на GPU и сравнивает WER/CER до и после на отложенной выборке FLEURS `kk_kz`. Для быстрой локальной проверки на CPU можно использовать [готовую казахскую Whisper-модель](https://huggingface.co/shyngys879/kazakh-whisper-large-v3-turbo) и предварительно конвертировать её в CTranslate2:
+Распакуйте ZIP, откройте терминал в папке `hackalem_ml`:
 
-```bash
-ml/.venv/bin/pip install -r ml/requirements-train.txt
-ml/.venv/bin/python ml/prepare_kz_model.py
-# Добавьте в ml/.env:
-# WHISPER_KZ_MODEL=ml/models/kazakh-whisper-large-v3-turbo-ct2
+```powershell
+python ml.py rank --transcript data/demo/transcript.json --out outputs/demo_candidates.json
+python -m unittest discover -s tests -v
 ```
 
-Для нескольких спикеров установите `ml/requirements-diarization.txt`, примите условия доступа к `pyannote/segmentation-3.0` и `pyannote/speaker-diarization-3.1` на Hugging Face и задайте `HF_TOKEN`. Без него worker помечает всю речь как `SPEAKER_00`; имена не угадываются.
+Или `powershell -ExecutionPolicy Bypass -File .\quickstart.ps1`. Linux/macOS: `sh quickstart.sh` (нужен `python3`). Скрипт не меняет системную execution policy.
 
-В OpenAI отправляется транскрипт, без аудиофайла. Модель выбирается через `OPENAI_MODEL`; результат запрашивается в режиме Structured Outputs. При большой записи текст делится на блоки, каждое поручение сохраняет ссылку на реплику-источник. Ключ API и модели не коммитятся.
+`demo_candidates.json` содержит оценки реплик, **не готовый протокол**. Вход демо полностью вымышленный. `data/demo/expected.json` — вручную заданный ожидаемый результат, **не предсказание**.
 
-Проверка без API-запросов:
+## Обучение детектора на CPU
 
-```bash
-PYTHONPATH=ml ml/.venv/bin/python -m unittest discover -s ml/tests -v
+Не устанавливайте training и audio requirements в одну среду: pyannote 4 и зафиксированная среда обучения используют разные поколения NumPy.
+
+```powershell
+python -m venv .venv-train
+.\.venv-train\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv-train\Scripts\python.exe ml.py generate-data --seed 42
+.\.venv-train\Scripts\python.exe ml.py train
 ```
 
-Документация: [ISSAI KSC2](https://issai.nu.edu.kz/kz-speech-corpus/) для последующего дообучения казахского STT; [faster-whisper](https://github.com/SYSTRAN/faster-whisper); [pyannote](https://huggingface.co/pyannote/speaker-diarization-3.1); [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
+Linux/macOS: пути `.venv-train/bin/python`. Обучение перезаписывает только модель детектора и его отчёт. Сначала обучается vectorizer исключительно на train, затем порог выбирается на validation; test не используется для подбора порога. Экспорт в JSON проверяется по вероятностям против sklearn. Чужие pickle/joblib-файлы загружать не нужно.
+
+Текущий синтетический F1 около 0.84; сравнивайте с `test_majority_positive_baseline` в отчёте. Небольшой перевес над «все реплики — поручения» показывает ограниченность этого baseline. Это **не 84% точности протокола**. Оставьте модуль вспомогательным; время хакатона полезнее потратить на качество ASR и проверку задач.
+
+## Полный запуск: установка аудиосреды
+
+Python 3.11, предпочтительно 16+ ГБ RAM; 24–32 ГБ удобнее. Найденная RTX 4050 Laptop 6 ГБ подходит как исходная конфигурация для последовательных экспериментов, но скорость и вместимость конкретных моделей здесь не измерены. На CPU будет медленнее.
+
+```powershell
+python -m venv .venv-audio
+.\.venv-audio\Scripts\python.exe -m pip install -r requirements-audio.txt
+.\.venv-audio\Scripts\python.exe ml.py doctor
+```
+
+В `requirements-audio.txt` зафиксированы основные библиотеки, но не весь транзитивный набор под каждую ОС/CUDA. После успешного прогона сохраните `python -m pip freeze` из аудиосреды в отдельный lock-файл команды. Рекомендуемый набор ещё не проверен чистой установкой в этой поставке; смотрите `reports/verification.json`.
+
+Для CUDA faster-whisper нужны CUDA 12/cuBLAS и cuDNN 9 в доступном DLL-пути. Для pyannote нужен GPU-совместимый PyTorch. Если драйверы/DLL не готовы — начните с `--device cpu`; один `nvidia-smi` не доказывает готовность библиотек. Инструкции производителей — в `docs/SOURCES.md`. Входное аудио декодируется PyAV; в pyannote передаётся waveform, чтобы не зависеть от системного декодера файлов TorchCodec. Если импорт pyannote всё равно требует FFmpeg в вашей сборке, установите FFmpeg согласно его инструкции.
+
+### 1. Скачать ASR
+
+Для финального сравнения русского/казахского/смешанного аудио начните с multilingual `large-v3`. Это выбор кандидата, а не утверждение о проверенной точности казахского.
+
+```powershell
+.\.venv-audio\Scripts\python.exe ml.py download-models --asr large-v3
+```
+
+Более лёгкий первичный прогон: `--asr small` и соответствующий `--model-path models/asr/small`. Ещё один кандидат: `--asr large-v3-turbo`; сравните на одинаковой ручной расшифровке. Не используйте англоязычные `.en` модели.
+
+### 2. Скачать диаризацию
+
+Откройте карточку `pyannote/speaker-diarization-community-1` на Hugging Face, примите условия доступа **своей учётной записью** и создайте read-токен с доступом к модели. Токен нужен для получения весов, аудио туда не отправляется. Это внешнее условие доступа владельца модели; код не может принять его за вас.
+
+```powershell
+$env:HF_TOKEN = Read-Host 'Hugging Face read token' -MaskInput
+.\.venv-audio\Scripts\python.exe ml.py download-models --asr large-v3 --diarization
+Remove-Item Env:HF_TOKEN
+```
+
+`-MaskInput` требует PowerShell 7. В Windows PowerShell 5 используйте безопасный ввод:
+
+```powershell
+$secret = Read-Host 'Hugging Face read token' -AsSecureString
+$env:HF_TOKEN = [System.Net.NetworkCredential]::new('', $secret).Password
+.\.venv-audio\Scripts\python.exe ml.py download-models --asr large-v3 --diarization
+Remove-Item Env:HF_TOKEN
+```
+
+Не вставляйте токен в `.py`, README, ZIP или сообщения команде. Без доступа к Community-1 можно проверить текстовую часть и ASR отдельно; это не заменяет обязательную диаризацию.
+
+### 3. Локальная LLM
+
+Установите Ollama по официальной инструкции. Для переносимого каталога весов закройте уже запущенное приложение Ollama в трее, затем в отдельном терминале из папки проекта:
+
+```powershell
+$env:OLLAMA_HOST = '127.0.0.1:11434'
+$env:OLLAMA_NO_CLOUD = '1'
+$env:OLLAMA_MODELS = Join-Path (Get-Location) 'models/ollama'
+ollama serve
+```
+
+В другом терминале:
+
+```powershell
+ollama pull qwen3:4b-instruct
+python ml.py extract --transcript data/demo/transcript.json --out outputs/demo_result.json
+python ml.py export --result outputs/demo_result.json --out outputs/demo_protocol
+```
+
+LLM вызывается только через `127.0.0.1`, системные HTTP-прокси и перенаправления отключены. Разрешён один локальный тег; cloud-backed модель отвергается до отправки текста. Сам сервер Ollama также должен быть локальным и с выключенным облаком. Runtime ASR/диаризации использует только локальные пути, HF offline mode, отключённую telemetry. Интернет нужен на этапе установки/загрузки, а не для обработки совещаний.
+
+### 4. Весь файл одним запуском
+
+Внутренний командный ZIP содержит `data/private/meeting_01.mp3` и `meeting_02.mp3`.
+
+```powershell
+.\.venv-audio\Scripts\python.exe ml.py run --audio data/private/meeting_01.mp3 --out outputs/private_meeting_01 --device cpu
+```
+
+После настройки CUDA замените на `--device cuda`. Перед аудиопрогоном выгрузите ранее загруженную LLM: `ollama stop qwen3:4b-instruct`. `run` запускает ASR и диаризацию отдельными процессами; LLM вызывается после их завершения и выгружается после ответа. Это уменьшает конкуренцию за VRAM, но не даёт гарантии, что любая конфигурация помещается в 6 ГБ.
+
+**Дата настоящих записей в документах не установлена.** Не подставляйте дату запуска. `--meeting-date YYYY-MM-DD` передавайте только после её подтверждения. Дата в вымышленном demo — часть сценария.
+
+### 5. Подтвердить имена говорящих
+
+Первый прогон даёт `SPEAKER_00`, `SPEAKER_01` и т. д. Прослушайте соответствующие интервалы из `diarization.json`; затем создайте собственный `speaker_names.json`:
+
+```json
+{"SPEAKER_00": "Имя подтверждённого участника"}
+```
+
+Нельзя копировать порядок имён из DOCX на номера голосов: номера кластеров произвольны и могут меняться. Не выдавайте обращение «Марат, сделайте…» за имя говорящего. Исполнитель также может отсутствовать в записи, как юрист Ерлан во втором протоколе.
+
+Перезапускать ASR для карты имён не требуется:
+
+```powershell
+python ml.py align --transcript outputs/private_meeting_01/asr.json --turns outputs/private_meeting_01/diarization.json --names speaker_names.json --out outputs/private_meeting_01/transcript.json
+python ml.py extract --transcript outputs/private_meeting_01/transcript.json --out outputs/private_meeting_01/result.json
+python ml.py export --result outputs/private_meeting_01/result.json --out outputs/private_meeting_01
+```
+
+Откройте `protocol.html`, нажмите «Печать / Сохранить как PDF». Это браузерный экспорт; серверная автоматическая генерация PDF/DOCX в этом ML-наборе не реализована.
+
+## Проверить только NLP на предоставленном тексте
+
+Этот режим отделяет ошибки извлечения от ошибок ASR:
+
+```powershell
+python ml.py extract --transcript data/private/meeting_01.transcript.json --out outputs/private_text_01.json
+python ml.py extract --transcript data/private/meeting_02.transcript.json --out outputs/private_text_02.json
+```
+
+Текст из DOCX уже содержит авторские имена говорящих, но не аудиодиаризацию и не временную разметку. Сводные таблицы и саммари исключены из входа. Во втором совещании эталон объединяет организацию обучения и смету; при сравнении отдельно проверьте объединённые/разделённые задачи.
+
+## Оценка качества
+
+1. ASR: вручную сверьте несколько минут аудио на каждом языке; DOCX может быть отредактированным текстом. `wer` по DOCX — только ориентировочное сравнение.
+2. Диаризация: вручную размеченные интервалы говорящих нужны для DER; таких эталонов здесь нет. Имена в DOCX не заменяют интервалы.
+3. Извлечение: сопоставьте задачи по смыслу, затем отдельно ответственного и срок. Не используйте число найденных задач как accuracy.
+4. Замерьте wall time, длительность записи и пиковую VRAM на целевой машине.
+
+```powershell
+python ml.py wer --reference data/private/meeting_01.transcript.json --prediction outputs/private_meeting_01/asr.json --out outputs/private_wer_01.json
+python ml.py evaluate --reference data/private/meeting_01.gold.json --prediction outputs/private_meeting_01/result.json --out outputs/private_eval_01.json
+```
+
+Без `--matches` оценка сопоставляет только одинаковые нормализованные формулировки и даёт нижнюю границу, а не semantic F1. Для честной оценки сформируйте файл:
+
+```json
+{"matches": [{"gold_id": "meeting_01_a01", "prediction_id": "meeting_01_a03"}]}
+```
+
+Это пример формата, не готовое сопоставление. Добавьте `--matches ваш_файл.json`. ID берите из реального результата. Все пары должны быть один-к-одному. Разделённые задачи сверьте вручную и зафиксируйте правило до сравнения моделей; эталоны не правьте под предсказания.
+
+## Структура
+
+```text
+ml.py                         CLI всех этапов
+meeting_ml/                   реализация ML и валидации
+models/action_detector.json   уже обученный переносимый детектор
+data/synthetic/               train / validation / test, метки происхождения
+data/demo/                    вымышленный диалог и ожидаемые задачи
+data/private/                 только в командном ZIP: оригиналы и извлечённые эталоны
+docs/                         архитектура, контракт backend, источники, план сбора данных
+reports/                      измеренные метрики и границы проверки
+tests/                        тесты логики; не оценка нейросетевого качества
+```
+
+## Передача команде и работа без интернета
+
+- `hackalem_ml_team.zip` включает исходные записи, документы и имена: **только внутренней команде**, не публичное демо. Это не анонимизированные аудио.
+- `hackalem_ml_share.zip` не включает исходные совещания; демо вымышленное. Оба архива содержат данные обучения, готовый детектор и код.
+- `SHA256SUMS.json` внутри архивов позволяет проверить целостность. Это не цифровая подпись издателя.
+
+```powershell
+python ml.py package --out ../hackalem_ml_team.zip --include-private
+python ml.py package --out ../hackalem_ml_share.zip
+python ml.py verify-zip ../hackalem_ml_team.zip
+```
+
+Сценарий «распаковать и выполнить текстовое демо» работает без дополнительных зависимостей при наличии Python. Полный запуск требует предварительно скачать **веса + зависимости + Ollama**. Обычный ZIP не является полностью автономным установщиком.
+
+После успешного полного прогона можно добавить веса:
+
+```powershell
+python ml.py package --out ../hackalem_ml_with_models.zip --include-private --include-models
+```
+
+Веса Ollama попадут внутрь только если сервер использовал `models/ollama` по инструкции выше. На другом компьютере задайте `OLLAMA_MODELS` на новый абсолютный путь. Перенос `.venv` между ОС/машинами не поддерживается. Для полностью изолированной машины заранее подготовьте wheels под ту же ОС/Python/CUDA, например `pip download -r requirements-audio.txt -d wheelhouse`, и установите через `pip install --no-index --find-links wheelhouse -r requirements-audio.txt`; также перенесите установщик Ollama и нужные системные библиотеки. Сначала проверьте это на чистой машине. `--include-models` сам по себе не скачивает отсутствующие веса и не включает CUDA.
+
+## Ограничения MVP
+
+- Русский, казахский и смешанный режимы заложены в выбор моделей и примеры; качество казахской/смешанной **аудиоречи ещё не измерено**. В исходных DOCX русские реплики, отдельного казахского аудиоэталона нет.
+- Локальная 4B LLM может ошибаться с поручениями, отрицаниями, косвенными исполнителями и пересмотром сроков. Дословная цитата не доказывает правильность её интерпретации. Все задачи выходят как `draft`, `needs_review=true`.
+- Повторы с совершенно одинаковыми task/owner/deadline удаляются кодом; смысловое объединение перефразированных повторов зависит от LLM и проверки человеком.
+- Относительные пятницы, недели, события и сроки без года сохраняются осторожно. Календарь рабочих дней/праздников не реализован.
+- Обработка длинных встреч по темам не реализована. Лимит текущего запроса — 26 000 символов JSON; это приблизительный входной барьер, а не гарантия вместимости токенов для любого языка. Для длинных встреч требуется отдельный chunk/reduce с переносом контекста и контролем исправлений сроков.
+- Live-поток, подключение к Teams/Zoom/Meet, рассылки, статусы и напоминания относятся к backend/frontend; они не нужны для демонстрации ML по загруженной записи, но часть общего сценария команды.
+
+Подробный приоритет работ для хакатона: `docs/HACKATHON_PLAN.md`.

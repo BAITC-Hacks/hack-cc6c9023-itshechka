@@ -26,3 +26,9 @@ export class ValidationError extends ApiException {
     super(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Invalid request payload", details);
   }
 }
+
+export class ConflictError extends ApiException {
+  constructor(message: string) {
+    super(HttpStatus.CONFLICT, "CONFLICT", message);
+  }
+}

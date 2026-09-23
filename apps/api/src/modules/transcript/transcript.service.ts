@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { AiProcessResult } from "@hackalem/contracts";
 import { PrismaService } from "../../prisma/prisma.service";
+import { ConflictError, NotFoundError } from "../../common/api-error";
 import {
   serializeParticipant,
   serializeSummary,
@@ -54,13 +55,21 @@ export class TranscriptService {
    */
   async saveProcessingResult(meetingId: string, result: AiProcessResult) {
     return this.prisma.$transaction(async (tx) => {
-      // Повторный запуск обработки заменяет предыдущий результат атомарно,
-      // иначе темы, реплики и поручения дублировались бы.
-      await tx.task.deleteMany({ where: { meetingId } });
-      await tx.summary.deleteMany({ where: { meetingId } });
-      await tx.utterance.deleteMany({ where: { meetingId } });
-      await tx.topic.deleteMany({ where: { meetingId } });
-      await tx.participant.deleteMany({ where: { meetingId } });
+      // The status change and all result rows commit together. A repeated or
+      // concurrent callback observes READY and cannot append duplicate rows.
+      const claimed = await tx.meeting.updateMany({
+        where: { id: meetingId, status: { in: ["UPLOADED", "PROCESSING"] } },
+        data: {
+          status: "READY",
+          ...(result.durationSec !== undefined ? { durationSec: result.durationSec } : {}),
+        },
+      });
+      if (claimed.count === 0) {
+        const meeting = await tx.meeting.findUnique({ where: { id: meetingId } });
+        if (!meeting) throw new NotFoundError("Meeting", meetingId);
+        if (meeting.status === "READY") return { participants: 0, topics: 0, duplicate: true };
+        throw new ConflictError(`Meeting is ${meeting.status}, result cannot be saved`);
+      }
 
       // 1. participants (upsert по speakerTag)
       const speakerToParticipantId = new Map<string, string>();

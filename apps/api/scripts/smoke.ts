@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import WebSocket from "ws";
 import { z } from "zod";
 import {
+  AUDIO_UPLOAD_FIELD,
   MeetingSchema, MeetingListResponseSchema, TranscriptResponseSchema,
   TopicSchema, SummarySchema, TaskSchema, TaskListResponseSchema,
   ExportSchema, ParticipantSchema, ApiErrorSchema, AuthResponseSchema,
@@ -50,6 +50,7 @@ async function main() {
 
   const swagger = await (await fetch(`${new URL(base).origin}/api/docs-json`)).json() as any;
   assert.ok(swagger.paths["/api/v1/meetings/{id}/process"]);
+  assert.ok(swagger.paths["/api/v1/meetings/{id}/audio-file"]?.post, "Swagger must expose the audio upload route");
   const list = MeetingListResponseSchema.parse(await request("/meetings?limit=100"));
   const seed = list.data.find(m => m.audioUrl === "seed://meeting-1.mp3");
   assert.ok(seed, "Run prisma:seed first");
@@ -99,13 +100,10 @@ async function main() {
   const pdfDownload = await fetch(`${base}/exports/${pdfExport.id}/download`, { headers: { Cookie: authCookie } });
   assert.equal(pdfDownload.status, 200);
   const pdfBytes = Buffer.from(await pdfDownload.arrayBuffer());
-  if (pdfExport.format === "PDF") {
-    assert.equal(pdfBytes.subarray(0, 5).toString(), "%PDF-");
-  } else {
-    assert.equal(pdfBytes.subarray(0, 2).toString(), "PK");
-    assert.match(pdfDownload.headers.get("content-disposition") ?? "", /\.docx/);
-  }
-  console.log(`PASS PDF request returns actual format ${pdfExport.format}`);
+  assert.equal(pdfBytes.subarray(0, 5).toString(), "%PDF-");
+  assert.match(pdfDownload.headers.get("content-disposition") ?? "", /\.pdf/);
+  await fs.writeFile("storage/smoke/seed-protocol.pdf", pdfBytes);
+  console.log("PASS PDF download -> storage/smoke/seed-protocol.pdf");
 
   const file = MeetingSchema.parse(await request("/meetings", "POST", { title: "Smoke demo fallback", sourceType: "FILE" }));
   await request(`/meetings/${file.id}/audio`, "POST", { audioUrl: "smoke://fixture.webm" });
@@ -119,6 +117,8 @@ async function main() {
   assert.equal(result.utterances.length, expected.utterances.length);
   const resultTasks = TaskListResponseSchema.parse(await request(`/meetings/${file.id}/tasks`));
   assert.equal(resultTasks.data.length, expected.tasks.length);
+  ApiErrorSchema.parse(await request(`/meetings/${file.id}/process`, "POST", {}, 409));
+  assert.equal(TaskListResponseSchema.parse(await request(`/meetings/${file.id}/tasks`)).data.length, resultTasks.data.length);
   const resultTopics = TopicSchema.array().parse(await request(`/meetings/${file.id}/topics`));
   assert.deepEqual(resultTopics.map(t => t.title), expected.topics.map(t => t.title));
   const overall = SummarySchema.array().parse(await request(`/meetings/${file.id}/summary`));
@@ -148,7 +148,7 @@ async function main() {
   });
   if (uploadResponse.status !== 201) throw new Error(`Multipart upload failed: ${uploadResponse.status} ${await uploadResponse.text()}`);
   MeetingSchema.parse(await uploadResponse.json());
-  const audioResponse = await fetch(`${base}/meetings/${multipart.id}/audio`);
+  const audioResponse = await fetch(`${base}/meetings/${multipart.id}/audio`, { headers: { Cookie: authCookie } });
   assert.equal(audioResponse.status, 200);
   assert.deepEqual(Buffer.from(await audioResponse.arrayBuffer()), fixtureBytes);
   const multipartProcessed = z.object({ accepted: z.literal(true), mode: z.enum(["worker", "demo-fallback"]) }).parse(
@@ -166,7 +166,36 @@ async function main() {
   assert.equal(callback.status, 201, await callback.text());
   assert.equal(MeetingSchema.parse(await request(`/meetings/${webhook.id}`)).status, "READY");
   const callbackTranscript = TranscriptResponseSchema.parse(await request(`/meetings/${webhook.id}/transcript`));
+  const callbackTasks = TaskListResponseSchema.parse(await request(`/meetings/${webhook.id}/tasks`));
   assert.deepEqual(callbackTranscript.utterances.map(u => u.text), result.utterances.map(u => u.text));
+  const repeated = await fetch(`${base}/internal/meetings/${webhook.id}/result`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(buildDemoResult(webhook.id)), signal: AbortSignal.timeout(15000),
+  });
+  assert.equal(repeated.status, 201, await repeated.text());
+  const unchanged = TranscriptResponseSchema.parse(await request(`/meetings/${webhook.id}/transcript`));
+  assert.equal(unchanged.utterances.length, callbackTranscript.utterances.length);
+  assert.equal(TaskListResponseSchema.parse(await request(`/meetings/${webhook.id}/tasks`)).data.length, callbackTasks.data.length);
+  assert.equal(MeetingSchema.parse(await request(`/meetings/${webhook.id}`)).status, "READY");
+
+  const sourceMp3 = process.env.SMOKE_MP3_PATH;
+  if (sourceMp3) {
+    const uploadMeeting = MeetingSchema.parse(await request("/meetings", "POST", { title: "Smoke real MP3 upload", sourceType: "FILE" }));
+    const original = await fs.readFile(sourceMp3);
+    const form = new FormData();
+    form.append(AUDIO_UPLOAD_FIELD, new Blob([original], { type: "audio/mpeg" }), "meeting_01.mp3");
+    const uploadedResponse = await fetch(`${base}/meetings/${uploadMeeting.id}/audio-file`, {
+      method: "POST", headers: { Cookie: authCookie }, body: form, signal: AbortSignal.timeout(15000),
+    });
+    assert.equal(uploadedResponse.status, 201, await uploadedResponse.clone().text());
+    const uploaded = MeetingSchema.parse(await uploadedResponse.json());
+    assert.equal(uploaded.status, "UPLOADED");
+    assert.ok(uploaded.audioUrl);
+    const uploadedAudio = await fetch(`${base}/meetings/${uploadMeeting.id}/audio`, { headers: { Cookie: authCookie } });
+    assert.equal(uploadedAudio.status, 200);
+    assert.deepEqual(Buffer.from(await uploadedAudio.arrayBuffer()), original);
+    console.log("PASS real MP3 upload matches source bytes");
+  }
 
   const live = MeetingSchema.parse(await request("/meetings", "POST", { title: "Smoke live binary", sourceType: "LIVE" }));
   assert.equal(live.status, "RECORDING");
@@ -175,7 +204,7 @@ async function main() {
   wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
   wsUrl.searchParams.set("meetingId", live.id);
   await new Promise<void>((resolve, reject) => {
-    const socket = new WebSocket(wsUrl);
+    const socket = new WebSocket(wsUrl, { headers: { Cookie: authCookie } });
     const timeout = setTimeout(() => { socket.terminate(); reject(new Error("WS timeout")); }, 10000);
     socket.on("error", reject);
     socket.on("open", () => { for (const chunk of chunks) socket.send(chunk); socket.close(); });
@@ -189,7 +218,9 @@ async function main() {
   }
   assert.equal(finalized?.status, "UPLOADED");
   assert.ok(finalized.audioUrl);
-  assert.deepEqual(await fs.readFile(path.resolve(finalized.audioUrl)), Buffer.concat(chunks));
+  const liveAudio = await fetch(`${base}/meetings/${live.id}/audio`, { headers: { Cookie: authCookie } });
+  assert.equal(liveAudio.status, 200);
+  assert.deepEqual(Buffer.from(await liveAudio.arrayBuffer()), Buffer.concat(chunks));
   await request(`/meetings/${live.id}/stop`, "POST", { audioUrl: finalized.audioUrl, durationSec: 1 });
   console.log("PASS live binary bytes, disconnect finalization and stop endpoint");
   await request("/auth/logout", "POST", undefined, 204);

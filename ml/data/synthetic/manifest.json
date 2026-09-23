@@ -1,0 +1,19 @@
+{
+  "seed": 42,
+  "splits": {
+    "train": {
+      "count": 498,
+      "positives": 324
+    },
+    "validation": {
+      "count": 81,
+      "positives": 54
+    },
+    "test": {
+      "count": 78,
+      "positives": 54
+    }
+  },
+  "split_policy": "disjoint template families, names, topics; exact duplicates removed across all splits",
+  "limitations": "Small templated linguistic benchmark. Kazakh/mixed examples require native-speaker review. Not audio data."
+}

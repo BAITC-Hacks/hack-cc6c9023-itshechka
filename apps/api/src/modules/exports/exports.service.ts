@@ -1,7 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import * as fs from "fs";
 import * as path from "path";
 import { Packer } from "docx";
@@ -9,9 +7,8 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { NotFoundError } from "../../common/api-error";
 import { serializeExport } from "../../common/serialize";
 import { buildProtocolDocument, ProtocolTopic } from "./protocol-docx.builder";
+import { writeProtocolPdf } from "./protocol-pdf.builder";
 import type { Env } from "../../config/env.schema";
-
-const execFileAsync = promisify(execFile);
 
 @Injectable()
 export class ExportsService {
@@ -77,43 +74,30 @@ export class ExportsService {
 
     const overallSummary = summaries.find((s) => s.topicId === null)?.text ?? null;
 
-    const doc = buildProtocolDocument({
+    const protocol = {
       title: meeting.title,
       organization: meeting.organization,
       createdAt: meeting.createdAt,
       topics: topicList,
       overallSummary,
-    });
+    };
 
     const dir = this.config.get("EXPORT_STORAGE_DIR", { infer: true });
     fs.mkdirSync(dir, { recursive: true });
-    const docxPath = path.join(dir, `${meetingId}.docx`);
-    const buffer = await Packer.toBuffer(doc);
-    fs.writeFileSync(docxPath, buffer);
-
-    let fileUrl = docxPath;
+    let fileUrl: string;
     if (format === "PDF") {
-      fileUrl = await this.convertToPdf(docxPath, dir);
+      fileUrl = path.join(dir, `${meetingId}.pdf`);
+      await writeProtocolPdf(protocol, fileUrl);
+    } else {
+      fileUrl = path.join(dir, `${meetingId}.docx`);
+      const doc = buildProtocolDocument(protocol);
+      fs.writeFileSync(fileUrl, await Packer.toBuffer(doc));
     }
 
     const exportRecord = await this.prisma.export.create({
-      data: { meetingId, format: fileUrl.endsWith(".pdf") ? "PDF" : "DOCX", fileUrl },
+      data: { meetingId, format, fileUrl },
     });
     return serializeExport(exportRecord);
-  }
-
-  private async convertToPdf(docxPath: string, dir: string): Promise<string> {
-    try {
-      // Требует libreoffice (soffice) на хосте, как и docx-skill в этом окружении.
-      await execFileAsync("soffice", ["--headless", "--convert-to", "pdf", "--outdir", dir, docxPath]);
-      const pdfPath = docxPath.replace(/\.docx$/, ".pdf");
-      if (!fs.existsSync(pdfPath)) throw new Error("soffice did not produce a PDF");
-      return pdfPath;
-    } catch (err) {
-      this.logger.warn(`PDF conversion failed (soffice not available?): ${(err as Error).message}`);
-      // Fallback: отдаём DOCX, если PDF-конвертер недоступен в окружении.
-      return docxPath;
-    }
   }
 
   async download(exportId: string) {

@@ -4,7 +4,7 @@ import type { AiProcessResult } from "@hackalem/contracts";
 import { PrismaService } from "../../prisma/prisma.service";
 import { MeetingsService } from "../meetings/meetings.service";
 import { TranscriptService } from "../transcript/transcript.service";
-import { NotFoundError } from "../../common/api-error";
+import { ConflictError, NotFoundError, ValidationError } from "../../common/api-error";
 import { buildDemoResult } from "./demo-adapter";
 import type { Env } from "../../config/env.schema";
 
@@ -27,7 +27,9 @@ export class AiOrchestratorService {
       throw new NotFoundError("Meeting audio", meetingId); // TODO: dedicated 409 error type
     }
 
-    await this.meetings.markProcessing(meetingId);
+    if (!(await this.meetings.markProcessing(meetingId))) {
+      throw new ConflictError("Meeting is already processing or ready");
+    }
 
     const workerUrl = this.config.get("AI_WORKER_URL", { infer: true });
     const publicApiUrl = this.config.get("PUBLIC_API_URL", { infer: true });
@@ -75,14 +77,9 @@ export class AiOrchestratorService {
 
   /** Webhook, который зовёт AI worker когда обработка закончена. */
   async handleResult(meetingId: string, result: AiProcessResult) {
-    if (result.meetingId !== meetingId) throw new BadGatewayException("AI result meetingId mismatch");
+    if (result.meetingId !== meetingId) {
+      throw new ValidationError({ meetingId: "Result meetingId must match the URL" });
+    }
     await this.transcript.saveProcessingResult(meetingId, result);
-    await this.meetings.markReady(meetingId, result.durationSec);
-  }
-
-  async handleFailure(meetingId: string, message: string) {
-    this.logger.error(`AI processing failed for ${meetingId}: ${message}`);
-    await this.meetings.markFailed(meetingId);
-    return { accepted: true };
   }
 }

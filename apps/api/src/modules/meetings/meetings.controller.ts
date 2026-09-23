@@ -6,6 +6,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { diskStorage } from "multer";
 import {
+  AUDIO_UPLOAD_FIELD,
+  AUDIO_UPLOAD_MAX_BYTES,
   AttachAudioRequestSchema,
   CreateMeetingRequestSchema,
 } from "@hackalem/contracts";

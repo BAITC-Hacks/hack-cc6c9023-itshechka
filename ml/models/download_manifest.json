@@ -1,0 +1,11 @@
+{
+  "downloaded": [
+    {
+      "repo": "Systran/faster-whisper-small",
+      "revision": "536b0662742c02347bc0e980a01041f333bce120",
+      "path": "models\\asr\\small"
+    }
+  ],
+  "huggingface_hub": "0.36.0",
+  "note": "Exact downloaded commit revisions recorded. Run package --include-models to hash all weights."
+}

@@ -1,0 +1,26 @@
+{
+  "meeting_id": "fictional_demo",
+  "tasks": [
+    {
+      "id": "demo_a01",
+      "task": "Подготовить отчёт по закупкам",
+      "owner": "Марат",
+      "deadline_text": "20 октября",
+      "due_date": "2026-10-20"
+    },
+    {
+      "id": "demo_a02",
+      "task": "Проверить датчики",
+      "owner": "Дана",
+      "deadline_text": "до пятницы",
+      "due_date": null
+    },
+    {
+      "id": "demo_a03",
+      "task": "Согласовать бюджет с Даной",
+      "owner": "Марат",
+      "deadline_text": null,
+      "due_date": null
+    }
+  ]
+}

@@ -8,14 +8,22 @@ coverage
 .env.local
 .DS_Store
 *.tsbuildinfo
+keypair
 
 # Backend runtime data
 apps/api/uploads/
 apps/api/storage/
 
 # ML local environment and heavy artifacts
-ml/.venv/
-ml/models/
-ml/data/
+ml/.venv*/
+ml/.runtime/
+ml/outputs/
+ml/models/asr/
+ml/models/diarization/
+ml/models/ollama/
+ml/data/private/
 **/__pycache__/
 *.pyc
+
+.pnpm-store/
+node_modules/

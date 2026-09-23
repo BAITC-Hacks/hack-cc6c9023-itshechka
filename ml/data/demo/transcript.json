@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "meeting_id": "fictional_demo",
+  "meeting_date": "2026-09-23",
+  "title": "Учебное совещание: вымышленные участники",
+  "source": "synthetic_text_only",
+  "participants": [
+    {
+      "speaker_id": "SPEAKER_00",
+      "name": "Айдана"
+    },
+    {
+      "speaker_id": "SPEAKER_01",
+      "name": "Марат"
+    },
+    {
+      "speaker_id": "SPEAKER_02",
+      "name": "Дана"
+    }
+  ],
+  "segments": [
+    {
+      "id": "demo_s001",
+      "speaker": "SPEAKER_00",
+      "speaker_name": "Айдана",
+      "start": null,
+      "end": null,
+      "text": "Марат, подготовьте отчёт по закупкам до 15 октября."
+    },
+    {
+      "id": "demo_s002",
+      "speaker": "SPEAKER_01",
+      "speaker_name": "Марат",
+      "start": null,
+      "end": null,
+      "text": "За две недели не успею. Давайте к 20 октября?"
+    },
+    {
+      "id": "demo_s003",
+      "speaker": "SPEAKER_00",
+      "speaker_name": "Айдана",
+      "start": null,
+      "end": null,
+      "text": "Согласовано, итоговый срок отчёта — 20 октября."
+    },
+    {
+      "id": "demo_s004",
+      "speaker": "SPEAKER_00",
+      "speaker_name": "Айдана",
+      "start": null,
+      "end": null,
+      "text": "Дана, датчиктерді тексеріңіз. Мерзімі: жұмаға дейін."
+    },
+    {
+      "id": "demo_s005",
+      "speaker": "SPEAKER_02",
+      "speaker_name": "Дана",
+      "start": null,
+      "end": null,
+      "text": "Жақсы, проверку датчиков сделаю до пятницы."
+    },
+    {
+      "id": "demo_s006",
+      "speaker": "SPEAKER_01",
+      "speaker_name": "Марат",
+      "start": null,
+      "end": null,
+      "text": "Отчёт за август уже отправлен, новых поручений по нему нет."
+    },
+    {
+      "id": "demo_s007",
+      "speaker": "SPEAKER_00",
+      "speaker_name": "Айдана",
+      "start": null,
+      "end": null,
+      "text": "Идею нового склада пока не утверждаем."
+    },
+    {
+      "id": "demo_s008",
+      "speaker": "SPEAKER_00",
+      "speaker_name": "Айдана",
+      "start": null,
+      "end": null,
+      "text": "Марат, ещё согласуйте бюджет с Даной. Срок уточним отдельно."
+    }
+  ]
+}

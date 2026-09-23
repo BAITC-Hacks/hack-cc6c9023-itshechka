@@ -1,0 +1,12 @@
+{
+  "name": "hattama-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.16.1",
+  "scripts": {
+    "dev": "corepack pnpm --filter @hattama/web dev",
+    "build": "corepack pnpm --filter @hattama/web build",
+    "lint": "corepack pnpm --filter @hattama/web lint",
+    "typecheck": "corepack pnpm --filter @hattama/web typecheck"
+  }
+}

@@ -1,0 +1,20 @@
+node_modules
+.next
+.turbo
+dist
+coverage
+.env
+.env.local
+.DS_Store
+*.tsbuildinfo
+
+# Backend runtime data
+backend/uploads/
+backend/storage/
+
+# ML local environment and heavy artifacts
+ml/.venv/
+ml/models/
+ml/data/
+**/__pycache__/
+*.pyc

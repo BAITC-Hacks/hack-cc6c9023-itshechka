@@ -1,0 +1,28 @@
+{
+  "name": "hackalem",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.16.1",
+  "scripts": {
+    "dev": "corepack pnpm --parallel --filter @hattama/web --filter @hackalem/api dev",
+    "dev:web": "corepack pnpm --filter @hattama/web dev",
+    "dev:api": "corepack pnpm --filter @hackalem/api dev",
+    "build": "corepack pnpm -r build",
+    "typecheck": "corepack pnpm -r typecheck",
+    "lint": "corepack pnpm --filter @hattama/web lint",
+    "prisma:generate": "corepack pnpm --filter @hackalem/api prisma:generate",
+    "prisma:migrate": "corepack pnpm --filter @hackalem/api prisma:migrate",
+    "prisma:seed": "corepack pnpm --filter @hackalem/api prisma:seed"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma"
+    ]
+  }
+}

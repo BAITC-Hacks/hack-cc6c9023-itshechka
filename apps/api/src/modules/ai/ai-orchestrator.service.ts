@@ -32,6 +32,9 @@ export class AiOrchestratorService {
     const workerUrl = this.config.get("AI_WORKER_URL", { infer: true });
     const publicApiUrl = this.config.get("PUBLIC_API_URL", { infer: true });
     const callbackUrl = `${publicApiUrl}/internal/meetings/${meetingId}/result`;
+    const workerAudioUrl = /^https?:\/\//.test(meeting.audioUrl)
+      ? meeting.audioUrl
+      : `${publicApiUrl}/meetings/${meetingId}/audio`;
 
     try {
       const res = await fetch(`${workerUrl}/process`, {
@@ -39,7 +42,7 @@ export class AiOrchestratorService {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           meetingId,
-          audioUrl: meeting.audioUrl,
+          audioUrl: workerAudioUrl,
           langHint,
           callbackUrl,
         }),

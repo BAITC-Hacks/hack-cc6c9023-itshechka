@@ -54,6 +54,14 @@ export class TranscriptService {
    */
   async saveProcessingResult(meetingId: string, result: AiProcessResult) {
     return this.prisma.$transaction(async (tx) => {
+      // Повторный запуск обработки заменяет предыдущий результат атомарно,
+      // иначе темы, реплики и поручения дублировались бы.
+      await tx.task.deleteMany({ where: { meetingId } });
+      await tx.summary.deleteMany({ where: { meetingId } });
+      await tx.utterance.deleteMany({ where: { meetingId } });
+      await tx.topic.deleteMany({ where: { meetingId } });
+      await tx.participant.deleteMany({ where: { meetingId } });
+
       // 1. participants (upsert по speakerTag)
       const speakerToParticipantId = new Map<string, string>();
       for (const s of result.speakers) {

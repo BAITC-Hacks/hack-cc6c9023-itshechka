@@ -27,6 +27,7 @@ export type MeetingTask = {
 
 export type TranscriptSegment = {
   id: string;
+  participantId?: string;
   speaker: string;
   role?: string;
   timestamp: string;
@@ -40,8 +41,12 @@ export type MeetingView = {
   date: string;
   duration: string;
   status: "processing" | "ready" | "error";
+  audioUrl?: string;
+  participantCount?: number;
+  taskCount?: number;
   languages: MeetingLanguage[];
   participants: string[];
+  participantIds?: Record<string, string>;
   summary: string[];
   tasks: MeetingTask[];
   transcript: TranscriptSegment[];

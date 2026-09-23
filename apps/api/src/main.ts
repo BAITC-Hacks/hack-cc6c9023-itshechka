@@ -23,9 +23,11 @@ async function bootstrap() {
   );
   SwaggerModule.setup("api/docs", app, swaggerDoc);
 
-  app.enableCors({
-    origin: config.get("FRONTEND_URL", { infer: true }),
-  });
+  const frontendOrigins = config.get("FRONTEND_URL", { infer: true })
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.enableCors({ origin: frontendOrigins });
 
   app.useWebSocketAdapter(new WsAdapter(app));
 

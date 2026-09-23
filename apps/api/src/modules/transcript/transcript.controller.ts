@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Param, Patch, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Query, UsePipes } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
+import { UpdateParticipantRequestSchema, type UpdateParticipantRequest } from "@hackalem/contracts";
+import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe";
 import { TranscriptService } from "./transcript.service";
 
 @ApiTags("transcript")
@@ -23,9 +25,10 @@ export class TranscriptController {
   }
 
   @Patch("participants/:id")
+  @UsePipes(new ZodValidationPipe(UpdateParticipantRequestSchema))
   updateParticipant(
     @Param("id") id: string,
-    @Body() dto: { fullName?: string; role?: string },
+    @Body() dto: UpdateParticipantRequest,
   ) {
     return this.transcript.updateParticipant(id, dto);
   }

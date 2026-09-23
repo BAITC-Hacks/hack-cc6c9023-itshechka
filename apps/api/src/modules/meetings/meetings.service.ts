@@ -1,4 +1,7 @@
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import * as fs from "fs";
+import * as path from "path";
 import type {
   AttachAudioRequest,
   CreateMeetingRequest,
@@ -6,10 +9,14 @@ import type {
 import { PrismaService } from "../../prisma/prisma.service";
 import { NotFoundError } from "../../common/api-error";
 import { serializeMeeting } from "../../common/serialize";
+import type { Env } from "../../config/env.schema";
 
 @Injectable()
 export class MeetingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService<Env, true>,
+  ) {}
 
   async create(dto: CreateMeetingRequest) {
     const meeting = await this.prisma.meeting.create({
@@ -28,6 +35,7 @@ export class MeetingsService {
     const [rows, total] = await Promise.all([
       this.prisma.meeting.findMany({
         where,
+        include: { _count: { select: { participants: true, tasks: true } } },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
         take: limit,
@@ -35,7 +43,11 @@ export class MeetingsService {
       this.prisma.meeting.count({ where }),
     ]);
     return {
-      data: rows.map(serializeMeeting),
+      data: rows.map((meeting) => ({
+        ...serializeMeeting(meeting),
+        participantCount: meeting._count.participants,
+        taskCount: meeting._count.tasks,
+      })),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
     };
   }
@@ -61,6 +73,17 @@ export class MeetingsService {
       },
     });
     return serializeMeeting(meeting);
+  }
+
+  async getAudioPath(id: string) {
+    const meeting = await this.getOrThrow(id);
+    const storageRoot = path.resolve(this.config.get("AUDIO_STORAGE_DIR", { infer: true }));
+    const audioPath = meeting.audioUrl ? path.resolve(meeting.audioUrl) : null;
+    const isStoredAudio = audioPath && (audioPath === storageRoot || audioPath.startsWith(`${storageRoot}${path.sep}`));
+    if (!audioPath || !isStoredAudio || !fs.existsSync(audioPath)) {
+      throw new NotFoundError("Meeting audio", id);
+    }
+    return audioPath;
   }
 
   /** Live-поток: клиент завершил запись — переводим встречу в PROCESSING как только есть финальный audioUrl. */

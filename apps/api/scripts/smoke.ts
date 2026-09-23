@@ -30,6 +30,9 @@ async function main() {
   const list = MeetingListResponseSchema.parse(await request("/meetings?limit=100"));
   const seed = list.data.find(m => m.audioUrl === "seed://meeting-1.mp3");
   assert.ok(seed, "Run prisma:seed first");
+  assert.ok((seed.participantCount ?? 0) > 0);
+  assert.ok((seed.taskCount ?? 0) > 0);
+  TaskListResponseSchema.parse(await request("/tasks"));
   const id = seed.id;
   MeetingSchema.parse(await request(`/meetings/${id}`));
   const transcript = TranscriptResponseSchema.parse(await request(`/meetings/${id}/transcript`));
@@ -107,6 +110,29 @@ async function main() {
   const participant = result.participants[0];
   const renamed = ParticipantSchema.parse(await request(`/participants/${participant.id}`, "PATCH", { fullName: "Smoke Participant" }));
   assert.equal(renamed.fullName, "Smoke Participant");
+
+  // Точный FILE-flow, используемый frontend: meeting -> multipart upload -> audio -> process.
+  const multipart = MeetingSchema.parse(await request("/meetings", "POST", { title: "Smoke multipart upload", sourceType: "FILE" }));
+  const fixtureBytes = Buffer.from("RIFF-smoke-audio");
+  const form = new FormData();
+  form.append("file", new Blob([fixtureBytes], { type: "audio/wav" }), "smoke.wav");
+  form.append("durationSec", "7");
+  const uploadResponse = await fetch(`${base}/meetings/${multipart.id}/audio-file`, {
+    method: "POST",
+    body: form,
+    signal: AbortSignal.timeout(15000),
+  });
+  if (uploadResponse.status !== 201) throw new Error(`Multipart upload failed: ${uploadResponse.status} ${await uploadResponse.text()}`);
+  MeetingSchema.parse(await uploadResponse.json());
+  const audioResponse = await fetch(`${base}/meetings/${multipart.id}/audio`);
+  assert.equal(audioResponse.status, 200);
+  assert.deepEqual(Buffer.from(await audioResponse.arrayBuffer()), fixtureBytes);
+  const multipartProcessed = z.object({ accepted: z.literal(true), mode: z.enum(["worker", "demo-fallback"]) }).parse(
+    await request(`/meetings/${multipart.id}/process`, "POST", { langHint: "mixed" }),
+  );
+  assert.equal(multipartProcessed.mode, "demo-fallback");
+  assert.equal(MeetingSchema.parse(await request(`/meetings/${multipart.id}`)).status, "READY");
+  console.log("PASS frontend multipart upload flow");
 
   const webhook = MeetingSchema.parse(await request("/meetings", "POST", { title: "Smoke worker callback", sourceType: "FILE" }));
   const callback = await fetch(`${base}/internal/meetings/${webhook.id}/result`, {

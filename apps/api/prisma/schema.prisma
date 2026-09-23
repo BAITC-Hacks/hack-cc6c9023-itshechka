@@ -27,6 +27,11 @@ enum TaskStatus {
   OVERDUE
 }
 
+enum TaskPriority {
+  NORMAL
+  HIGH
+}
+
 enum ExportFormat {
   PDF
   DOCX
@@ -110,6 +115,7 @@ model Task {
   dueDate           DateTime?
   dueRaw            String?
   status            TaskStatus   @default(OPEN)
+  priority          TaskPriority @default(NORMAL)
   sourceUtteranceId String?
   createdAt         DateTime     @default(now())
 

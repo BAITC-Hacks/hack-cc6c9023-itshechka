@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+export const apiUrl = (path: string) => `${API_URL}${path}`;
 
 export class ApiError extends Error {
   constructor(
@@ -11,9 +12,10 @@ export class ApiError extends Error {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
+  const response = await fetch(apiUrl(path), {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { ...(isFormData ? {} : { "Content-Type": "application/json" }), ...init?.headers },
   });
 
   if (!response.ok) {
@@ -21,6 +23,6 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     throw new ApiError(payload?.message ?? "Не удалось выполнить запрос", response.status, payload?.code);
   }
 
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
-

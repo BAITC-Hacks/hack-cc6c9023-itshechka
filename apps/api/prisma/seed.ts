@@ -1,10 +1,15 @@
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
+const seedMeetingId = "seed-demo-meeting";
 
 async function main() {
+  // Seed можно безопасно запускать повторно: заменяется только принадлежащая ему demo-встреча.
+  await prisma.meeting.deleteMany({ where: { id: seedMeetingId } });
   const meeting = await prisma.meeting.create({
     data: {
+      id: seedMeetingId,
       title: "Развитие химической промышленности и техника безопасности",
       organization: "АО «Самрук-Қазына Ондеу»",
       sourceType: "FILE",
@@ -90,6 +95,8 @@ async function main() {
         topicId: topic1.id,
         description: "Разработать единую стратегию закупа сырья для химических активов группы",
         responsibleId: gulmira.id,
+        responsibleRaw: "Гульмира Сериковна",
+        dueDate: new Date("2026-10-15T00:00:00.000Z"),
         dueRaw: "15 октября",
         status: "OPEN",
       },
@@ -98,6 +105,8 @@ async function main() {
         topicId: topic1.id,
         description: "Подготовить финансовое решение по проекту модернизации завода в Павлодарской области",
         responsibleId: timur.id,
+        responsibleRaw: "Тимур Болатович",
+        dueDate: new Date("2026-09-30T00:00:00.000Z"),
         dueRaw: "30 сентября",
         status: "OPEN",
       },

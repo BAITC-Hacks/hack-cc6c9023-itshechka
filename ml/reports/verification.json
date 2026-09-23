@@ -1,0 +1,32 @@
+{
+  "status": "partial_validation",
+  "python": "3.11.0",
+  "platform": "Windows",
+  "training_environment": {
+    "scikit-learn": "1.9.0",
+    "numpy": "2.4.6",
+    "scipy": "1.15.3"
+  },
+  "completed": [
+    "Read all three supplied DOCX contents",
+    "Imported 60 transcript turns and 16 author-reference tasks, excluded summaries from input",
+    "Read MP3 metadata locally: 274.25 s and 206.03125 s at 48000 Hz",
+    "Generated 657 synthetic text examples across disjoint train/validation/test templates",
+    "Trained TF-IDF logistic-regression detector and verified portable JSON probabilities",
+    "24 stdlib unit tests passed",
+    "Ran trained model on fictional demo",
+    "Built internal and share ZIP archives and verified every member SHA-256",
+    "Extracted both archives into fresh directories: demo + 24 tests passed with Python -S (no site-packages)"
+  ],
+  "not_verified": [
+    "Complete clean-install requirements environment",
+    "Neural ASR inference on supplied recordings",
+    "Community-1 inference (gated model weights unavailable)",
+    "Real Ollama/Qwen extraction (Ollama not installed)",
+    "Real ru/kk/mixed ASR WER and diarization DER",
+    "End-to-end offline run and GPU memory usage",
+    "Browser PDF layout"
+  ],
+  "note": "LLM contract tested using a mock, not real inference. Supplied DOCX tables are author references, not audio-verified gold.",
+  "installation_attempt": "Clean pinned training install did not complete in this environment; interrupted pip. Trained/tested using existing sklearn 1.9.0; no claim of tested dependency install."
+}

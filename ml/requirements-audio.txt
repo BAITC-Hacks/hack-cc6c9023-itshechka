@@ -1,0 +1,4 @@
+# Install in a separate .venv-audio (pyannote 4 requires numpy >= 2).
+faster-whisper==1.2.1
+pyannote.audio==4.0.3
+huggingface-hub==0.36.0

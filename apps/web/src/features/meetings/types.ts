@@ -8,6 +8,7 @@ export const createMeetingFormSchema = z.object({
   language: meetingLanguageSchema,
   notifyParticipants: z.boolean(),
   fileName: z.string().min(1, "Добавьте аудио- или видеофайл"),
+  demoOutcome: z.enum(["success", "error"]),
 });
 
 export type CreateMeetingForm = z.infer<typeof createMeetingFormSchema>;
@@ -45,4 +46,3 @@ export type MeetingView = {
   tasks: MeetingTask[];
   transcript: TranscriptSegment[];
 };
-

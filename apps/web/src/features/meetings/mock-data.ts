@@ -33,8 +33,8 @@ export const demoMeeting: MeetingView = {
 
 export const meetings: MeetingView[] = [
   demoMeeting,
-  { ...demoMeeting, id: "production-kpi", title: "Производственные показатели направлений", date: "2026-09-22T09:30:00.000Z", duration: "03:26", participants: ["Данияр Серикович", "Ботагоз Нурлановна", "Жандос Талгатович", "Ерболат Мухтарович", "Салтанат Ерболовна"], tasks: demoMeeting.tasks.slice(0, 4) },
-  { ...demoMeeting, id: "investment-committee", title: "Инвестиционный комитет · сентябрь", date: "2026-09-19T05:00:00.000Z", duration: "42:18", languages: ["ru"], participants: ["Данияр Серикович", "Тимур Болатович"], tasks: demoMeeting.tasks.slice(2, 5) },
+  { ...demoMeeting, id: "production-kpi", title: "Производственные показатели направлений", date: "2026-09-22T09:30:00.000Z", duration: "03:26", participants: ["Данияр Серикович", "Ботагоз Нурлановна", "Жандос Талгатович", "Ерболат Мухтарович", "Салтанат Ерболовна"], tasks: demoMeeting.tasks.slice(0, 4).map((task) => ({ ...task, id: `production-${task.id}`, meetingId: "production-kpi" })) },
+  { ...demoMeeting, id: "investment-committee", title: "Инвестиционный комитет · сентябрь", date: "2026-09-19T05:00:00.000Z", duration: "42:18", languages: ["ru"], participants: ["Данияр Серикович", "Тимур Болатович"], tasks: demoMeeting.tasks.slice(2, 5).map((task) => ({ ...task, id: `investment-${task.id}`, meetingId: "investment-committee" })) },
 ];
 
 export const allTasks: MeetingTask[] = meetings.flatMap((meeting) => meeting.tasks.map((task) => ({ ...task, meetingId: meeting.id })));

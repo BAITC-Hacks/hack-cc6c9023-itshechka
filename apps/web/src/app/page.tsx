@@ -6,15 +6,20 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useMeetings } from "@/features/meetings/hooks";
-import { allTasks } from "@/features/meetings/mock-data";
+import { useDemoStore } from "@/features/demo/demo-store";
 import { formatDate } from "@/lib/utils";
 
 export default function DashboardPage() {
   const { data: meetings, isLoading, isError, refetch } = useMeetings();
+  const store = useDemoStore();
+  const visibleMeetings = store.hydrated ? store.meetings : meetings;
+  const allTasks = store.meetings.flatMap((meeting) => meeting.tasks.map((task) => ({ ...task, meetingId: meeting.id })));
+  const activeTasks = allTasks.filter((task) => task.status !== "done").length;
+  const completedRate = allTasks.length ? Math.round(allTasks.filter((task) => task.status === "done").length / allTasks.length * 100) : 0;
   const stats = [
-    { label: "Совещаний в сентябре", value: "12", note: "+3 к августу", icon: AudioLines, tone: "blue" },
-    { label: "Активных поручений", value: "18", note: "6 требуют внимания", icon: ListChecks, tone: "violet" },
-    { label: "Выполнено в срок", value: "87%", note: "+9% за месяц", icon: CheckCircle2, tone: "green" },
+    { label: "Совещаний в сентябре", value: String(store.meetings.length), note: "доступно в demo", icon: AudioLines, tone: "blue" },
+    { label: "Активных поручений", value: String(activeTasks), note: `${allTasks.filter((task) => task.status === "overdue").length} требуют внимания`, icon: ListChecks, tone: "violet" },
+    { label: "Выполнено", value: `${completedRate}%`, note: "по текущим протоколам", icon: CheckCircle2, tone: "green" },
     { label: "Сэкономлено времени", value: "14 ч", note: "на подготовке протоколов", icon: Clock3, tone: "amber" },
   ];
 
@@ -32,15 +37,15 @@ export default function DashboardPage() {
       <section className="focus-card">
         <div className="focus-card__glow" />
         <div className="focus-card__icon"><Sparkles size={23} /></div>
-        <div className="focus-card__copy"><span className="focus-card__label">Готово к проверке</span><h2>Новый протокол обработан</h2><p>ИИ выделил 6 поручений и 3 ключевых решения из совещания по химической промышленности.</p></div>
-        <Button asChild variant="secondary"><Link href="/meetings/operational-review">Открыть протокол<ArrowRight size={18} /></Link></Button>
+        <div className="focus-card__copy"><span className="focus-card__label">Готово к проверке</span><h2>{visibleMeetings?.[0]?.title ?? "Новый протокол обработан"}</h2><p>ИИ выделил поручения и ключевые решения. Проверьте результат перед рассылкой.</p></div>
+        <Button asChild variant="secondary"><Link href={`/meetings/${visibleMeetings?.[0]?.id ?? "operational-review"}`}>Открыть протокол<ArrowRight size={18} /></Link></Button>
       </section>
 
       <div className="dashboard-grid">
         <section className="section-panel recent-panel">
           <div className="section-header"><div><h2>Последние совещания</h2><p>Протоколы и результаты обработки</p></div><Link href="/meetings" className="text-link">Все совещания<ChevronRight size={17} /></Link></div>
-          {isLoading ? <div className="list-skeleton">{[1,2,3].map((n) => <div key={n} className="skeleton skeleton--row" />)}</div> : isError ? <div className="error-state"><AlertTriangle /><div><strong>Не удалось загрузить совещания</strong><span>Проверьте соединение и попробуйте ещё раз.</span></div><Button variant="secondary" onClick={() => refetch()}>Повторить</Button></div> : (
-            <div className="meeting-list">{meetings?.slice(0,3).map((meeting) => <Link key={meeting.id} href={`/meetings/${meeting.id}`} className="meeting-row"><span className="meeting-row__icon"><FileAudio size={20} /></span><span className="meeting-row__main"><strong>{meeting.title}</strong><small>{formatDate(meeting.date)} · {meeting.duration} · {meeting.participants.length} участников</small></span><span className="meeting-row__tasks"><ListChecks size={15} />{meeting.tasks.length} поручений</span><span className="ready-label"><CheckCircle2 size={14} />Готов</span><ChevronRight className="meeting-row__chevron" size={18} /></Link>)}</div>
+          {!store.hydrated && isLoading ? <div className="list-skeleton">{[1,2,3].map((n) => <div key={n} className="skeleton skeleton--row" />)}</div> : !store.hydrated && isError ? <div className="error-state"><AlertTriangle /><div><strong>Не удалось загрузить совещания</strong><span>Проверьте соединение и попробуйте ещё раз.</span></div><Button variant="secondary" onClick={() => refetch()}>Повторить</Button></div> : (
+            <div className="meeting-list">{visibleMeetings?.slice(0,3).map((meeting) => <Link key={meeting.id} href={`/meetings/${meeting.id}`} className="meeting-row"><span className="meeting-row__icon"><FileAudio size={20} /></span><span className="meeting-row__main"><strong>{meeting.title}</strong><small>{formatDate(meeting.date)} · {meeting.duration} · {meeting.participants.length} участников</small></span><span className="meeting-row__tasks"><ListChecks size={15} />{meeting.tasks.length} поручений</span><span className="ready-label"><CheckCircle2 size={14} />Готов</span><ChevronRight className="meeting-row__chevron" size={18} /></Link>)}</div>
           )}
         </section>
 
@@ -55,4 +60,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

@@ -3,6 +3,8 @@
 import { CalendarDays, CheckSquare2, LayoutDashboard, Plus, Search, ShieldCheck, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -13,6 +15,8 @@ const nav = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [globalQuery, setGlobalQuery] = useState("");
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Основная навигация">
@@ -40,7 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="workspace">
         <header className="topbar">
           <Link href="/" className="mobile-brand"><span className="brand__mark"><Sparkles size={18} /></span><strong>Хаттама</strong></Link>
-          <div className="search"><Search size={18} aria-hidden="true" /><input aria-label="Поиск" placeholder="Найти совещание или поручение" /></div>
+          <form className="search" onSubmit={(event) => { event.preventDefault(); router.push(`/meetings?q=${encodeURIComponent(globalQuery)}`); }}><Search size={18} aria-hidden="true" /><input aria-label="Поиск" value={globalQuery} onChange={(event) => setGlobalQuery(event.target.value)} placeholder="Найти совещание" /></form>
           <Link href="/new" className="button button--primary button--md"><Plus size={18} aria-hidden="true" /><span>Новое совещание</span></Link>
         </header>
         <main id="main-content" className="main-content">{children}</main>
@@ -56,4 +60,3 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-

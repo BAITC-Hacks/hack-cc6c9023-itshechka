@@ -8,6 +8,7 @@
     "dev:web": "corepack pnpm --filter @hattama/web dev",
     "dev:api": "corepack pnpm --filter @hackalem/api dev",
     "build": "corepack pnpm -r build",
+    "test": "corepack pnpm --filter @hattama/web test",
     "typecheck": "corepack pnpm -r typecheck",
     "lint": "corepack pnpm --filter @hattama/web lint",
     "prisma:generate": "corepack pnpm --filter @hackalem/api prisma:generate",

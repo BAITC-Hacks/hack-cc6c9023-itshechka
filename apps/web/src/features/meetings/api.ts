@@ -107,7 +107,16 @@ export async function getMeeting(id: string): Promise<MeetingView> {
 export async function createMeeting(input: CreateMeetingForm): Promise<MeetingView> {
   if (useMocks) {
     await pause(2600);
-    return { ...demoMeeting, title: input.title };
+    if (input.demoOutcome === "error") throw new Error("Демонстрационная ошибка обработки");
+    const id = `meeting-${Date.now()}`;
+    return {
+      ...demoMeeting,
+      id,
+      title: input.title,
+      date: new Date().toISOString(),
+      tasks: demoMeeting.tasks.map((task) => ({ ...task, id: `${id}-${task.id}`, meetingId: id })),
+      transcript: demoMeeting.transcript.map((segment) => ({ ...segment, id: `${id}-${segment.id}` })),
+    };
   }
 
   const payload: CreateMeetingRequest = {

@@ -6,6 +6,8 @@ export const EnvSchema = z.object({
   FRONTEND_URL: z.string().min(1).default("http://localhost:3000"),
   JWT_SECRET: z.string().min(1).default("change-me-for-local-demo"),
   AI_WORKER_URL: z.string().min(1).default("http://localhost:5000"),
+  AI_WORKER_TOKEN: z.string().min(1).optional(),
+  AI_DEMO_FALLBACK: z.enum(["true", "false"]).default("false"),
   PUBLIC_API_URL: z.string().min(1).default("http://localhost:4000/api/v1"),
   AUDIO_STORAGE_DIR: z.string().min(1).default("./storage/audio"),
   EXPORT_STORAGE_DIR: z.string().min(1).default("./storage/exports"),

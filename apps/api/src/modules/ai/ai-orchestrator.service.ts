@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { BadGatewayException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { AiProcessResult } from "@hackalem/contracts";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -39,7 +39,12 @@ export class AiOrchestratorService {
     try {
       const res = await fetch(`${workerUrl}/process`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(this.config.get("AI_WORKER_TOKEN", { infer: true })
+            ? { "X-AI-Worker-Token": this.config.get("AI_WORKER_TOKEN", { infer: true })! }
+            : {}),
+        },
         body: JSON.stringify({
           meetingId,
           audioUrl: workerAudioUrl,
@@ -51,21 +56,33 @@ export class AiOrchestratorService {
       if (!res.ok) throw new Error(`AI worker responded ${res.status}`);
       return { accepted: true, mode: "worker" as const };
     } catch (err) {
-      // AI worker недоступен (например, во время разработки backend'а отдельно) —
-      // не блокируем демонстрацию pipeline: используем demo-adapter с фикстурой
-      // в ТОЙ ЖЕ схеме AiProcessResult, что и настоящий воркер.
-      this.logger.warn(
-        `AI worker unreachable (${(err as Error).message}), falling back to demo adapter`,
-      );
-      const demoResult = buildDemoResult(meetingId);
-      await this.handleResult(meetingId, demoResult);
-      return { accepted: true, mode: "demo-fallback" as const };
+      if (this.config.get("AI_DEMO_FALLBACK", { infer: true }) === "true") {
+        this.logger.warn(`AI worker unavailable (${(err as Error).message}); using demo data`);
+        const demoResult = buildDemoResult(meetingId);
+        await this.handleResult(meetingId, demoResult);
+        return { accepted: true, mode: "demo-fallback" as const };
+      }
+      this.logger.error(`AI worker rejected processing: ${(err as Error).message}`);
+      await this.meetings.markFailed(meetingId);
+      throw new BadGatewayException("AI worker недоступен или отклонил обработку");
     }
+  }
+
+  verifyWorkerToken(token: string | undefined) {
+    const expected = this.config.get("AI_WORKER_TOKEN", { infer: true });
+    if (!expected || token !== expected) throw new UnauthorizedException("Invalid AI worker token");
   }
 
   /** Webhook, который зовёт AI worker когда обработка закончена. */
   async handleResult(meetingId: string, result: AiProcessResult) {
+    if (result.meetingId !== meetingId) throw new BadGatewayException("AI result meetingId mismatch");
     await this.transcript.saveProcessingResult(meetingId, result);
     await this.meetings.markReady(meetingId, result.durationSec);
+  }
+
+  async handleFailure(meetingId: string, message: string) {
+    this.logger.error(`AI processing failed for ${meetingId}: ${message}`);
+    await this.meetings.markFailed(meetingId);
+    return { accepted: true };
   }
 }

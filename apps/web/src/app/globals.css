@@ -130,12 +130,14 @@ button:disabled { cursor: not-allowed; opacity: .56; }
 
 /* HATTAMA product identity and public experience */
 .product-brand { width: max-content; display: inline-flex; align-items: center; gap: 11px; color: var(--ink); }
-.product-brand__mark { width: 42px; height: 42px; display: grid; place-items: center; flex: 0 0 auto; color: #fff; background: var(--primary); border-radius: 12px; }
+.product-brand__mark { position: relative; width: 42px; height: 42px; display: block; flex: 0 0 auto; overflow: hidden; background: #fff; border-radius: 12px; }
+.product-brand__mark img { position: absolute; width: 214%; height: auto; max-width: none; left: -62%; top: -12%; }
 .product-brand__name strong, .product-brand__name small { display: block; }
 .product-brand__name strong { font-size: 17px; line-height: 1.05; letter-spacing: .08em; }
+.product-brand__name em { color: #7567ea; font-style: normal; }
 .product-brand__name small { margin-top: 4px; color: var(--muted); font-size: 9px; letter-spacing: .04em; }
 .product-brand--inverse { color: #f5fffc; }
-.product-brand--inverse .product-brand__mark { color: #bdf7e9; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.12); }
+.product-brand--inverse .product-brand__mark { background: #fff; border: 1px solid rgba(255,255,255,.12); }
 .product-brand--inverse .product-brand__name small { color: #91aaa9; }
 .product-brand--compact .product-brand__mark { width: 36px; height: 36px; border-radius: 10px; }
 .product-brand--compact .product-brand__name small { display: none; }

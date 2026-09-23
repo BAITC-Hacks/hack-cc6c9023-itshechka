@@ -1,0 +1,9 @@
+-r requirements.txt
+torch>=2.6,<3
+transformers>=4.50,<5
+datasets>=3.6,<4
+accelerate>=1,<2
+peft>=0.15,<1
+jiwer>=3,<5
+soundfile>=0.13,<1
+librosa>=0.10,<1

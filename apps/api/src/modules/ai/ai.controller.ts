@@ -1,4 +1,5 @@
-import { Body, Controller, Param, Post, UsePipes } from "@nestjs/common";
+import { Body, Controller, Headers, Param, Post, UsePipes } from "@nestjs/common";
+import { z } from "zod";
 import { ApiTags } from "@nestjs/swagger";
 import { AiProcessResultSchema, ProcessMeetingRequestSchema } from "@hackalem/contracts";
 import { AiOrchestratorService } from "./ai-orchestrator.service";
@@ -20,7 +21,16 @@ export class AiController {
   @Public()
   @Post("internal/meetings/:id/result")
   @UsePipes(new ZodValidationPipe(AiProcessResultSchema))
-  receiveResult(@Param("id") id: string, @Body() dto: any) {
+  receiveResult(@Param("id") id: string, @Body() dto: any, @Headers("x-ai-worker-token") token?: string) {
+    this.orchestrator.verifyWorkerToken(token);
     return this.orchestrator.handleResult(id, dto);
+  }
+
+  @Public()
+  @Post("internal/meetings/:id/failed")
+  @UsePipes(new ZodValidationPipe(z.object({ message: z.string().min(1) })))
+  receiveFailure(@Param("id") id: string, @Body() dto: { message: string }, @Headers("x-ai-worker-token") token?: string) {
+    this.orchestrator.verifyWorkerToken(token);
+    return this.orchestrator.handleFailure(id, dto.message);
   }
 }

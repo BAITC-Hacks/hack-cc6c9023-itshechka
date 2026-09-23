@@ -12,7 +12,7 @@ import {
 import { z } from "zod";
 import { MeetingsService } from "./meetings.service";
 import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe";
-import { Public } from "../../common/auth/public.decorator";
+import { WorkerAccess } from "../../common/auth/public.decorator";
 
 const StopLiveSchema = z.object({
   audioUrl: z.string().min(1),
@@ -94,7 +94,7 @@ export class MeetingsController {
   }
 
   @Get(":id/audio")
-  @Public()
+  @WorkerAccess()
   async downloadAudio(@Param("id") id: string, @Res() response: Response) {
     const audioPath = await this.meetings.getAudioPath(id);
     response.setHeader("Content-Disposition", `inline; filename="${path.basename(audioPath)}"`);

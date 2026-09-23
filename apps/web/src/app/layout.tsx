@@ -9,6 +9,8 @@ const manrope = Manrope({ subsets: ["latin", "cyrillic"], display: "swap" });
 export const metadata: Metadata = {
   title: { default: "HATTAMA AI", template: "%s · HATTAMA AI" },
   description: "Локальный ИИ-ассистент для протоколирования совещаний и контроля поручений",
+  icons: { icon: "/hattama-logo.jpg" },
+  openGraph: { images: ["/hattama-logo.jpg"] },
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f4f7f7" };

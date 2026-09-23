@@ -54,6 +54,14 @@ export class TranscriptService {
    */
   async saveProcessingResult(meetingId: string, result: AiProcessResult) {
     return this.prisma.$transaction(async (tx) => {
+      // Claim the result in the same transaction as its rows. A repeated webhook
+      // waits for the row lock, then observes READY and cannot append duplicates.
+      const claimed = await tx.meeting.updateMany({
+        where: { id: meetingId, status: { in: ["UPLOADED", "PROCESSING"] } },
+        data: { status: "READY", ...(result.durationSec ? { durationSec: result.durationSec } : {}) },
+      });
+      if (claimed.count === 0) return { participants: 0, topics: 0, duplicate: true };
+
       // 1. participants (upsert по speakerTag)
       const speakerToParticipantId = new Map<string, string>();
       for (const s of result.speakers) {

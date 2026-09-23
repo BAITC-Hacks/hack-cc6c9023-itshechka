@@ -48,6 +48,10 @@ export const AttachAudioRequestSchema = z.object({
 });
 export type AttachAudioRequest = z.infer<typeof AttachAudioRequestSchema>;
 
+// Multipart POST /meetings/:id/upload: field name and size limit shared with web.
+export const AUDIO_UPLOAD_FIELD = "file";
+export const AUDIO_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
+
 export const ProcessMeetingRequestSchema = z.object({
   langHint: z.enum(["ru", "kz", "mixed"]).default("mixed"),
 });

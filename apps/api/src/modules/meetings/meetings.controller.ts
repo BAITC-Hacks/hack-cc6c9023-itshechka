@@ -1,6 +1,9 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UsePipes } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Get, Param, Patch, Post, Query, UploadedFile, UseInterceptors, UsePipes } from "@nestjs/common";
+import { ApiBody, ApiConsumes, ApiTags } from "@nestjs/swagger";
+import { FileInterceptor } from "@nestjs/platform-express";
 import {
+  AUDIO_UPLOAD_FIELD,
+  AUDIO_UPLOAD_MAX_BYTES,
   AttachAudioRequestSchema,
   CreateMeetingRequestSchema,
 } from "@hackalem/contracts";
@@ -42,6 +45,20 @@ export class MeetingsController {
   @UsePipes(new ZodValidationPipe(AttachAudioRequestSchema))
   attachAudio(@Param("id") id: string, @Body() dto: any) {
     return this.meetings.attachAudio(id, dto);
+  }
+
+  @Post(":id/upload")
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    schema: {
+      type: "object",
+      required: [AUDIO_UPLOAD_FIELD],
+      properties: { [AUDIO_UPLOAD_FIELD]: { type: "string", format: "binary" } },
+    },
+  })
+  @UseInterceptors(FileInterceptor(AUDIO_UPLOAD_FIELD, { limits: { fileSize: AUDIO_UPLOAD_MAX_BYTES } }))
+  uploadAudio(@Param("id") id: string, @UploadedFile() file?: { buffer: Buffer; originalname: string; size: number }) {
+    return this.meetings.uploadAudio(id, file);
   }
 
   /** Завершение live-записи: клиент/WS-gateway сохранил итоговый файл, репортит сюда финальный URL. */

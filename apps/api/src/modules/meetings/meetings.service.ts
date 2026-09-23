@@ -1,15 +1,20 @@
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import * as fs from "fs/promises";
+import * as path from "path";
+import { randomUUID } from "crypto";
 import type {
   AttachAudioRequest,
   CreateMeetingRequest,
 } from "@hackalem/contracts";
 import { PrismaService } from "../../prisma/prisma.service";
-import { NotFoundError } from "../../common/api-error";
+import { ConflictError, NotFoundError, ValidationError } from "../../common/api-error";
 import { serializeMeeting } from "../../common/serialize";
+import type { Env } from "../../config/env.schema";
 
 @Injectable()
 export class MeetingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly config: ConfigService<Env, true>) {}
 
   async create(dto: CreateMeetingRequest) {
     const meeting = await this.prisma.meeting.create({
@@ -63,6 +68,31 @@ export class MeetingsService {
     return serializeMeeting(meeting);
   }
 
+  async uploadAudio(id: string, file?: { buffer: Buffer; originalname: string; size: number }) {
+    const meeting = await this.getOrThrow(id);
+    if (meeting.sourceType !== "FILE" || meeting.status !== "UPLOADED") {
+      throw new ConflictError("Audio upload requires an unprocessed FILE meeting");
+    }
+    if (!file?.buffer?.length || !file.originalname.toLowerCase().endsWith(".mp3")) {
+      throw new ValidationError({ file: "A non-empty MP3 file is required" });
+    }
+    const bytes = file.buffer;
+    const isMp3 = bytes.subarray(0, 3).toString("ascii") === "ID3" ||
+      (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0);
+    if (!isMp3) throw new ValidationError({ file: "Invalid MP3 header" });
+
+    const dir = path.resolve(this.config.get("AUDIO_STORAGE_DIR", { infer: true }));
+    await fs.mkdir(dir, { recursive: true });
+    const filePath = path.join(dir, `${id}-${randomUUID()}.mp3`);
+    await fs.writeFile(filePath, bytes, { flag: "wx" });
+    try {
+      return await this.attachAudio(id, { audioUrl: filePath });
+    } catch (error) {
+      await fs.unlink(filePath);
+      throw error;
+    }
+  }
+
   /** Live-поток: клиент завершил запись — переводим встречу в PROCESSING как только есть финальный audioUrl. */
   async stopLive(id: string, audioUrl: string, durationSec?: number) {
     const meeting = await this.getOrThrow(id);
@@ -77,11 +107,11 @@ export class MeetingsService {
   }
 
   async markProcessing(id: string) {
-    const meeting = await this.prisma.meeting.update({
-      where: { id },
+    const updated = await this.prisma.meeting.updateMany({
+      where: { id, status: { in: ["UPLOADED", "FAILED"] } },
       data: { status: "PROCESSING" },
     });
-    return serializeMeeting(meeting);
+    return updated.count === 1;
   }
 
   async markReady(id: string, durationSec?: number) {

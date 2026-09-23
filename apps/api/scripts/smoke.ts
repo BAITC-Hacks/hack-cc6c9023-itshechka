@@ -4,6 +4,7 @@ import * as path from "node:path";
 import WebSocket from "ws";
 import { z } from "zod";
 import {
+  AUDIO_UPLOAD_FIELD,
   MeetingSchema, MeetingListResponseSchema, TranscriptResponseSchema,
   TopicSchema, SummarySchema, TaskSchema, TaskListResponseSchema,
   ExportSchema, ParticipantSchema, ApiErrorSchema,
@@ -27,6 +28,8 @@ async function main() {
   z.object({ status: z.literal("ok") }).parse(await request("/health"));
   const swagger = await (await fetch(`${new URL(base).origin}/api/docs-json`)).json() as any;
   assert.ok(swagger.paths["/api/v1/meetings/{id}/process"]);
+  const uploadSpec = swagger.paths["/api/v1/meetings/{id}/upload"]?.post?.requestBody?.content?.["multipart/form-data"];
+  assert.ok(uploadSpec?.schema?.properties?.[AUDIO_UPLOAD_FIELD], "Swagger must expose the MP3 file field");
   const list = MeetingListResponseSchema.parse(await request("/meetings?limit=100"));
   const seed = list.data.find(m => m.audioUrl === "seed://meeting-1.mp3");
   assert.ok(seed, "Run prisma:seed first");
@@ -70,16 +73,14 @@ async function main() {
   await fs.writeFile("storage/smoke/seed-protocol.docx", bytes);
   console.log("PASS DOCX download -> storage/smoke/seed-protocol.docx");
   const pdfExport = ExportSchema.parse(await request(`/meetings/${id}/export`, "POST", { format: "PDF" }));
+  assert.equal(pdfExport.format, "PDF");
   const pdfDownload = await fetch(`${base}/exports/${pdfExport.id}/download`);
   assert.equal(pdfDownload.status, 200);
   const pdfBytes = Buffer.from(await pdfDownload.arrayBuffer());
-  if (pdfExport.format === "PDF") {
-    assert.equal(pdfBytes.subarray(0, 5).toString(), "%PDF-");
-  } else {
-    assert.equal(pdfBytes.subarray(0, 2).toString(), "PK");
-    assert.match(pdfDownload.headers.get("content-disposition") ?? "", /\.docx/);
-  }
-  console.log(`PASS PDF request returns actual format ${pdfExport.format}`);
+  assert.equal(pdfBytes.subarray(0, 5).toString(), "%PDF-");
+  assert.match(pdfDownload.headers.get("content-disposition") ?? "", /\.pdf/);
+  await fs.writeFile("storage/smoke/seed-protocol.pdf", pdfBytes);
+  console.log("PASS PDF download -> storage/smoke/seed-protocol.pdf");
 
   const file = MeetingSchema.parse(await request("/meetings", "POST", { title: "Smoke demo fallback", sourceType: "FILE" }));
   await request(`/meetings/${file.id}/audio`, "POST", { audioUrl: "smoke://fixture.webm" });
@@ -93,6 +94,8 @@ async function main() {
   assert.equal(result.utterances.length, expected.utterances.length);
   const resultTasks = TaskListResponseSchema.parse(await request(`/meetings/${file.id}/tasks`));
   assert.equal(resultTasks.data.length, expected.tasks.length);
+  ApiErrorSchema.parse(await request(`/meetings/${file.id}/process`, "POST", {}, 409));
+  assert.equal(TaskListResponseSchema.parse(await request(`/meetings/${file.id}/tasks`)).data.length, resultTasks.data.length);
   const resultTopics = TopicSchema.array().parse(await request(`/meetings/${file.id}/topics`));
   assert.deepEqual(resultTopics.map(t => t.title), expected.topics.map(t => t.title));
   const overall = SummarySchema.array().parse(await request(`/meetings/${file.id}/summary`));
@@ -117,6 +120,30 @@ async function main() {
   assert.equal(MeetingSchema.parse(await request(`/meetings/${webhook.id}`)).status, "READY");
   const callbackTranscript = TranscriptResponseSchema.parse(await request(`/meetings/${webhook.id}/transcript`));
   assert.deepEqual(callbackTranscript.utterances.map(u => u.text), result.utterances.map(u => u.text));
+  const repeated = await fetch(`${base}/internal/meetings/${webhook.id}/result`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(buildDemoResult(webhook.id)), signal: AbortSignal.timeout(15000),
+  });
+  assert.equal(repeated.status, 201, await repeated.text());
+  const unchanged = TranscriptResponseSchema.parse(await request(`/meetings/${webhook.id}/transcript`));
+  assert.equal(unchanged.utterances.length, callbackTranscript.utterances.length);
+
+  const sourceMp3 = path.resolve("../../ml/data/private/meeting_01.mp3");
+  if (await fs.stat(sourceMp3).then(() => true, () => false)) {
+    const uploadMeeting = MeetingSchema.parse(await request("/meetings", "POST", { title: "Smoke real MP3 upload", sourceType: "FILE" }));
+    const original = await fs.readFile(sourceMp3);
+    const form = new FormData();
+    form.append(AUDIO_UPLOAD_FIELD, new Blob([original], { type: "audio/mpeg" }), "meeting_01.mp3");
+    const uploadedResponse = await fetch(`${base}/meetings/${uploadMeeting.id}/upload`, {
+      method: "POST", body: form, signal: AbortSignal.timeout(15000),
+    });
+    assert.equal(uploadedResponse.status, 201, await uploadedResponse.clone().text());
+    const uploaded = MeetingSchema.parse(await uploadedResponse.json());
+    assert.equal(uploaded.status, "UPLOADED");
+    assert.ok(uploaded.audioUrl);
+    assert.deepEqual(await fs.readFile(uploaded.audioUrl), original);
+    console.log("PASS real MP3 upload matches source bytes");
+  }
 
   const live = MeetingSchema.parse(await request("/meetings", "POST", { title: "Smoke live binary", sourceType: "LIVE" }));
   assert.equal(live.status, "RECORDING");

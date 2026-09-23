@@ -16,7 +16,7 @@ async function bootstrap() {
   const swaggerDoc = SwaggerModule.createDocument(
     app,
     new DocumentBuilder()
-      .setTitle("HackAlem AI — Meeting Protocol API")
+      .setTitle("HATTAMA AI — Meeting Protocol API")
       .setDescription("Backend REST API for meeting auto-protocoling with task extraction")
       .setVersion("0.1.0")
       .build(),
@@ -27,7 +27,7 @@ async function bootstrap() {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
-  app.enableCors({ origin: frontendOrigins });
+  app.enableCors({ origin: frontendOrigins, credentials: true });
 
   app.useWebSocketAdapter(new WsAdapter(app));
 

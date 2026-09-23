@@ -15,6 +15,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
   const response = await fetch(apiUrl(path), {
     ...init,
+    credentials: "include",
     headers: { ...(isFormData ? {} : { "Content-Type": "application/json" }), ...init?.headers },
   });
 

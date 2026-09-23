@@ -1,10 +1,26 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import { hashPassword } from "../src/common/password";
 
 const prisma = new PrismaClient();
 const seedMeetingId = "seed-demo-meeting";
 
 async function main() {
+  const [adminPasswordHash, juryPasswordHash] = await Promise.all([
+    hashPassword("Admin2026!"),
+    hashPassword("Jury2026!"),
+  ]);
+  await prisma.user.upsert({
+    where: { email: "admin@hattama.kz" },
+    update: { passwordHash: adminPasswordHash, fullName: "Данияр Серикович", organization: "HATTAMA AI", role: "ADMIN" },
+    create: { email: "admin@hattama.kz", passwordHash: adminPasswordHash, fullName: "Данияр Серикович", organization: "HATTAMA AI", role: "ADMIN" },
+  });
+  await prisma.user.upsert({
+    where: { email: "jury@hattama.kz" },
+    update: { passwordHash: juryPasswordHash, fullName: "Аккаунт жюри", organization: "Hackathon Jury", role: "MEMBER" },
+    create: { email: "jury@hattama.kz", passwordHash: juryPasswordHash, fullName: "Аккаунт жюри", organization: "Hackathon Jury", role: "MEMBER" },
+  });
+
   // Seed можно безопасно запускать повторно: заменяется только принадлежащая ему demo-встреча.
   await prisma.meeting.deleteMany({ where: { id: seedMeetingId } });
   const meeting = await prisma.meeting.create({
@@ -124,7 +140,7 @@ async function main() {
   });
 
   // eslint-disable-next-line no-console
-  console.log(`Seeded demo meeting: ${meeting.id}`);
+  console.log(`Seeded demo meeting: ${meeting.id}; demo accounts: admin@hattama.kz, jury@hattama.kz`);
 }
 
 main()

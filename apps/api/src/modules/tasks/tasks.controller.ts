@@ -9,6 +9,11 @@ import { ZodValidationPipe } from "../../common/pipes/zod-validation.pipe";
 export class TasksController {
   constructor(private readonly tasks: TasksService) {}
 
+  @Get("tasks")
+  listAll() {
+    return this.tasks.listAll();
+  }
+
   @Get("meetings/:id/tasks")
   listByMeeting(@Param("id") id: string, @Query("topicId") topicId?: string) {
     return this.tasks.listByMeeting(id, topicId);

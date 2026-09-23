@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const TaskStatusSchema = z.enum(["OPEN", "IN_PROGRESS", "DONE", "OVERDUE"]);
 export type TaskStatus = z.infer<typeof TaskStatusSchema>;
+export const TaskPrioritySchema = z.enum(["NORMAL", "HIGH"]);
+export type TaskPriority = z.infer<typeof TaskPrioritySchema>;
 
 export const TaskSchema = z.object({
   id: z.string(),
@@ -13,6 +15,7 @@ export const TaskSchema = z.object({
   dueDate: z.string().nullable(), // ISO 8601 UTC
   dueRaw: z.string().nullable(),
   status: TaskStatusSchema,
+  priority: TaskPrioritySchema,
   sourceUtteranceId: z.string().nullable(),
   createdAt: z.string(),
 });
@@ -30,6 +33,7 @@ export const UpdateTaskRequestSchema = z.object({
   dueDate: z.string().datetime().nullable().optional(),
   dueRaw: z.string().nullable().optional(),
   status: TaskStatusSchema.optional(),
+  priority: TaskPrioritySchema.optional(),
   topicId: z.string().nullable().optional(),
 });
 export type UpdateTaskRequest = z.infer<typeof UpdateTaskRequestSchema>;

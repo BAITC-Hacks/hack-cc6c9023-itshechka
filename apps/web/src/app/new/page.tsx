@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useDemoStore } from "@/features/demo/demo-store";
 import { useCreateMeeting } from "@/features/meetings/hooks";
 import { validateMeetingFile } from "@/features/meetings/demo-utils";
+import { USE_MOCKS } from "@/features/meetings/api";
 import { createMeetingFormSchema, type CreateMeetingForm } from "@/features/meetings/types";
 
 const processingSteps = ["Загрузка в защищённый контур", "Распознавание речи и спикеров", "Выделение решений и поручений"];
@@ -96,11 +97,12 @@ export default function NewMeetingPage() {
 
   const onSubmit = (values: CreateMeetingForm) => {
     if (!consent) { toast.error("Нужно подтвердить согласие участников"); return; }
+    if (!file) { toast.error("Добавьте запись совещания"); return; }
     setStep(0);
-    mutation.mutate({ ...values, demoOutcome: outcome }, {
+    mutation.mutate({ values: { ...values, demoOutcome: outcome }, file, durationSec: recordingSeconds || undefined }, {
       onSuccess: (meeting) => {
-        addMeeting(meeting, file ? URL.createObjectURL(file) : undefined);
-        toast.success("Протокол создан", { description: "ИИ уже подготовил саммари и поручения" });
+        if (USE_MOCKS) addMeeting(meeting, URL.createObjectURL(file));
+        toast.success(meeting.status === "ready" ? "Протокол создан" : "Запись принята в обработку", { description: meeting.status === "ready" ? "ИИ уже подготовил саммари и поручения" : "Готовый результат появится на странице автоматически" });
         router.push(`/meetings/${meeting.id}`);
       },
       onError: () => toast.error("Не удалось обработать запись", { description: "Переключите demo-сценарий или повторите попытку." }),
@@ -122,7 +124,7 @@ export default function NewMeetingPage() {
         {mutation.isError && <div className="inline-error" role="alert"><AlertCircle size={19} /><div><strong>Обработка прервана</strong><span>Файл сохранён в форме — можно сразу повторить.</span></div><Button type="submit" size="sm" variant="secondary"><RotateCcw size={15} />Повторить</Button></div>}
         <div className="form-actions"><Button type="button" variant="ghost" onClick={() => router.back()}>Отмена</Button><Button type="submit" size="lg" disabled={mutation.isPending || !file || !consent}>{mutation.isPending ? <><LoaderCircle className="spin" size={18} />Обрабатываем…</> : <><UploadCloud size={18} />Начать обработку</>}</Button></div>
       </div>
-      <aside className="processing-card"><div className="processing-card__head"><span><LockKeyhole size={21} /></span><div><h2>Локальная обработка</h2><p>Файл не передаётся во внешние облака</p></div></div><div className="demo-control"><div><strong>Demo-сценарий</strong><small>Проверка success/error состояния</small></div><select aria-label="Результат демонстрационной обработки" value={outcome} onChange={(event) => setOutcome(event.target.value as "success" | "error")}><option value="success">Успех</option><option value="error">Ошибка</option></select></div>{mutation.isPending && <div className="progress-block"><div><span>Обработка</span><strong>{progress}%</strong></div><progress max="100" value={progress} /></div>}<ol>{processingSteps.map((label, index) => <li key={label} className={mutation.isPending && index <= step ? "is-active" : ""}><span>{mutation.isPending && index < step ? <Check size={15} /> : index + 1}</span><div><strong>{label}</strong><small>{index === 0 ? "Шифрование и проверка файла" : index === 1 ? "RU · KZ · шала-қазақ" : "Ответственный · срок · суть"}</small></div></li>)}</ol><div className="processing-card__note"><LockKeyhole size={17} />Совместимо с развёртыванием on-premise</div></aside>
+      <aside className="processing-card"><div className="processing-card__head"><span><LockKeyhole size={21} /></span><div><h2>Локальная обработка</h2><p>Файл не передаётся во внешние облака</p></div></div>{USE_MOCKS && <div className="demo-control"><div><strong>Demo-сценарий</strong><small>Проверка success/error состояния</small></div><select aria-label="Результат демонстрационной обработки" value={outcome} onChange={(event) => setOutcome(event.target.value as "success" | "error")}><option value="success">Успех</option><option value="error">Ошибка</option></select></div>}{mutation.isPending && <div className="progress-block"><div><span>Обработка</span><strong>{progress}%</strong></div><progress max="100" value={progress} /></div>}<ol>{processingSteps.map((label, index) => <li key={label} className={mutation.isPending && index <= step ? "is-active" : ""}><span>{mutation.isPending && index < step ? <Check size={15} /> : index + 1}</span><div><strong>{label}</strong><small>{index === 0 ? "Шифрование и проверка файла" : index === 1 ? "RU · KZ · шала-қазақ" : "Ответственный · срок · суть"}</small></div></li>)}</ol><div className="processing-card__note"><LockKeyhole size={17} />Совместимо с развёртыванием on-premise</div></aside>
     </form>
   </div>;
 }

@@ -11,9 +11,15 @@ export class TasksService {
   async listByMeeting(meetingId: string, topicId?: string) {
     const tasks = await this.prisma.task.findMany({
       where: { meetingId, ...(topicId ? { topicId } : {}) },
+      include: { responsible: true },
       orderBy: { createdAt: "asc" },
     });
-    return { data: tasks.map(serializeTask) };
+    return { data: tasks.map((task) => ({ ...serializeTask(task), responsibleRaw: task.responsibleRaw ?? task.responsible?.fullName ?? task.responsible?.speakerTag ?? null })) };
+  }
+
+  async listAll() {
+    const tasks = await this.prisma.task.findMany({ include: { responsible: true }, orderBy: { createdAt: "desc" } });
+    return { data: tasks.map((task) => ({ ...serializeTask(task), responsibleRaw: task.responsibleRaw ?? task.responsible?.fullName ?? task.responsible?.speakerTag ?? null })) };
   }
 
   async update(id: string, dto: UpdateTaskRequest) {
@@ -29,6 +35,7 @@ export class TasksService {
         dueDate: dto.dueDate === undefined ? undefined : dto.dueDate ? new Date(dto.dueDate) : null,
         dueRaw: dto.dueRaw,
         status: dto.status,
+        priority: dto.priority,
         topicId: dto.topicId,
       },
     });

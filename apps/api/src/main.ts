@@ -16,16 +16,18 @@ async function bootstrap() {
   const swaggerDoc = SwaggerModule.createDocument(
     app,
     new DocumentBuilder()
-      .setTitle("HackAlem AI — Meeting Protocol API")
+      .setTitle("HATTAMA AI — Meeting Protocol API")
       .setDescription("Backend REST API for meeting auto-protocoling with task extraction")
       .setVersion("0.1.0")
       .build(),
   );
   SwaggerModule.setup("api/docs", app, swaggerDoc);
 
-  app.enableCors({
-    origin: config.get("FRONTEND_URL", { infer: true }),
-  });
+  const frontendOrigins = config.get("FRONTEND_URL", { infer: true })
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.enableCors({ origin: frontendOrigins, credentials: true });
 
   app.useWebSocketAdapter(new WsAdapter(app));
 

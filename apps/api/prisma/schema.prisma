@@ -27,9 +27,45 @@ enum TaskStatus {
   OVERDUE
 }
 
+enum TaskPriority {
+  NORMAL
+  HIGH
+}
+
 enum ExportFormat {
   PDF
   DOCX
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  fullName     String
+  organization String?
+  role         UserRole  @default(MEMBER)
+  createdAt    DateTime  @default(now())
+  sessions     Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 model Meeting {
@@ -110,6 +146,7 @@ model Task {
   dueDate           DateTime?
   dueRaw            String?
   status            TaskStatus   @default(OPEN)
+  priority          TaskPriority @default(NORMAL)
   sourceUtteranceId String?
   createdAt         DateTime     @default(now())
 

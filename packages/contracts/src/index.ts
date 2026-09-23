@@ -4,3 +4,4 @@ export * from "./transcript";
 export * from "./tasks";
 export * from "./exports";
 export * from "./ai-worker";
+export * from "./auth";

@@ -9,10 +9,10 @@ Frontend прототипа локального ИИ-секретаря для 
 - загрузка аудио/видео, выбор языка и экран этапов обработки;
 - карточка протокола: AI-саммари, поручения, диаризованный транскрипт;
 - общий реестр поручений со статусами и быстрым завершением;
-- экспорт настоящего `.docx` в браузере и печать/сохранение в PDF;
+- серверный экспорт протокола в DOCX/PDF с браузерным fallback в mock-режиме;
 - адаптивная навигация для desktop, tablet и mobile;
 - loading, empty и error states;
-- mock-слой за тем же feature API, который будет использовать реальный backend.
+- реальный NestJS API по умолчанию и переключаемый mock-слой для автономной демонстрации.
 
 ## Стек
 
@@ -40,18 +40,31 @@ corepack pnpm build
 
 ## Подключение backend
 
-По умолчанию интерфейс работает на демонстрационных данных. Когда REST API готов:
+По умолчанию интерфейс работает с backend на `http://localhost:4000/api/v1`:
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
 NEXT_PUBLIC_USE_MOCKS=false
 ```
 
-Ожидаемые endpoints первого вертикального среза:
+Используемые endpoints:
 
 - `GET /meetings`
 - `GET /meetings/:id`
 - `POST /meetings`
+- `POST /meetings/:id/audio-file`
+- `POST /meetings/:id/process`
+- `GET /meetings/:id/audio`
+- `GET /meetings/:id/transcript`
+- `GET /meetings/:id/summary`
+- `GET /meetings/:id/tasks`
+- `GET /tasks`
+- `PATCH /tasks/:id`
+- `PATCH /participants/:id`
+- `POST /meetings/:id/export`
+- `GET /exports/:id/download`
+
+Чтобы временно запустить только frontend на встроенных данных, установите `NEXT_PUBLIC_USE_MOCKS=true` и перезапустите dev-сервер.
 
 Запросы страниц идут через `features/meetings/hooks.ts` → `features/meetings/api.ts` → единый `lib/api.ts`. Контракты описаны Zod-схемами в `packages/contracts`.
 

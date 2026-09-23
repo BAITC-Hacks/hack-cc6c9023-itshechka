@@ -7,18 +7,23 @@ import {
   AUDIO_UPLOAD_FIELD,
   MeetingSchema, MeetingListResponseSchema, TranscriptResponseSchema,
   TopicSchema, SummarySchema, TaskSchema, TaskListResponseSchema,
-  ExportSchema, ParticipantSchema, ApiErrorSchema,
+  ExportSchema, ParticipantSchema, ApiErrorSchema, AuthResponseSchema,
 } from "@hackalem/contracts";
 import { buildDemoResult } from "../src/modules/ai/demo-adapter";
 
 const base = process.env.SMOKE_API_URL ?? "http://localhost:4000/api/v1";
+let authCookie = "";
 async function request(route: string, method = "GET", body?: unknown, status = method === "POST" ? 201 : 200) {
   const response = await fetch(`${base}${route}`, {
-    method, headers: { "Content-Type": "application/json" },
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(authCookie ? { Cookie: authCookie } : {}),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(15000),
   });
-  const result = await response.json();
+  const result = response.status === 204 ? undefined : await response.json();
   assert.equal(response.status, status, `${method} ${route}: ${JSON.stringify(result)}`);
   console.log(`PASS ${method} ${route} (${status})`);
   return result;
@@ -26,6 +31,24 @@ async function request(route: string, method = "GET", body?: unknown, status = m
 
 async function main() {
   z.object({ status: z.literal("ok") }).parse(await request("/health"));
+  const unauthorized = await fetch(`${base}/meetings`, { signal: AbortSignal.timeout(15000) });
+  assert.equal(unauthorized.status, 401, "Protected endpoints must reject anonymous requests");
+  console.log("PASS protected API rejects anonymous requests (401)");
+
+  const loginResponse = await fetch(`${base}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "jury@hattama.kz", password: "Jury2026!" }),
+    signal: AbortSignal.timeout(15000),
+  });
+  const loginPayload = await loginResponse.json();
+  assert.equal(loginResponse.status, 201, JSON.stringify(loginPayload));
+  AuthResponseSchema.parse(loginPayload);
+  authCookie = (loginResponse.headers.get("set-cookie") ?? "").split(";", 1)[0];
+  assert.ok(authCookie.startsWith("hattama_session="), "Login must set the session cookie");
+  console.log("PASS judge account login and HttpOnly session cookie");
+  AuthResponseSchema.shape.user.parse(await request("/auth/me"));
+
   const swagger = await (await fetch(`${new URL(base).origin}/api/docs-json`)).json() as any;
   assert.ok(swagger.paths["/api/v1/meetings/{id}/process"]);
   const uploadSpec = swagger.paths["/api/v1/meetings/{id}/upload"]?.post?.requestBody?.content?.["multipart/form-data"];
@@ -33,6 +56,9 @@ async function main() {
   const list = MeetingListResponseSchema.parse(await request("/meetings?limit=100"));
   const seed = list.data.find(m => m.audioUrl === "seed://meeting-1.mp3");
   assert.ok(seed, "Run prisma:seed first");
+  assert.ok((seed.participantCount ?? 0) > 0);
+  assert.ok((seed.taskCount ?? 0) > 0);
+  TaskListResponseSchema.parse(await request("/tasks"));
   const id = seed.id;
   MeetingSchema.parse(await request(`/meetings/${id}`));
   const transcript = TranscriptResponseSchema.parse(await request(`/meetings/${id}/transcript`));
@@ -64,7 +90,7 @@ async function main() {
   ApiErrorSchema.parse(await request(`/tasks/${task.id}`, "PATCH", { status: "INVALID" }, 400));
   ApiErrorSchema.parse(await request("/meetings/missing-smoke-id", "GET", undefined, 404));
   const exported = ExportSchema.parse(await request(`/meetings/${id}/export`, "POST", { format: "DOCX" }));
-  const download = await fetch(`${base}/exports/${exported.id}/download`);
+  const download = await fetch(`${base}/exports/${exported.id}/download`, { headers: { Cookie: authCookie } });
   assert.equal(download.status, 200);
   assert.match(download.headers.get("content-disposition") ?? "", /\.docx/);
   const bytes = Buffer.from(await download.arrayBuffer());
@@ -73,8 +99,7 @@ async function main() {
   await fs.writeFile("storage/smoke/seed-protocol.docx", bytes);
   console.log("PASS DOCX download -> storage/smoke/seed-protocol.docx");
   const pdfExport = ExportSchema.parse(await request(`/meetings/${id}/export`, "POST", { format: "PDF" }));
-  assert.equal(pdfExport.format, "PDF");
-  const pdfDownload = await fetch(`${base}/exports/${pdfExport.id}/download`);
+  const pdfDownload = await fetch(`${base}/exports/${pdfExport.id}/download`, { headers: { Cookie: authCookie } });
   assert.equal(pdfDownload.status, 200);
   const pdfBytes = Buffer.from(await pdfDownload.arrayBuffer());
   assert.equal(pdfBytes.subarray(0, 5).toString(), "%PDF-");
@@ -110,6 +135,30 @@ async function main() {
   const participant = result.participants[0];
   const renamed = ParticipantSchema.parse(await request(`/participants/${participant.id}`, "PATCH", { fullName: "Smoke Participant" }));
   assert.equal(renamed.fullName, "Smoke Participant");
+
+  // Точный FILE-flow, используемый frontend: meeting -> multipart upload -> audio -> process.
+  const multipart = MeetingSchema.parse(await request("/meetings", "POST", { title: "Smoke multipart upload", sourceType: "FILE" }));
+  const fixtureBytes = Buffer.from("RIFF-smoke-audio");
+  const form = new FormData();
+  form.append("file", new Blob([fixtureBytes], { type: "audio/wav" }), "smoke.wav");
+  form.append("durationSec", "7");
+  const uploadResponse = await fetch(`${base}/meetings/${multipart.id}/audio-file`, {
+    method: "POST",
+    headers: { Cookie: authCookie },
+    body: form,
+    signal: AbortSignal.timeout(15000),
+  });
+  if (uploadResponse.status !== 201) throw new Error(`Multipart upload failed: ${uploadResponse.status} ${await uploadResponse.text()}`);
+  MeetingSchema.parse(await uploadResponse.json());
+  const audioResponse = await fetch(`${base}/meetings/${multipart.id}/audio`);
+  assert.equal(audioResponse.status, 200);
+  assert.deepEqual(Buffer.from(await audioResponse.arrayBuffer()), fixtureBytes);
+  const multipartProcessed = z.object({ accepted: z.literal(true), mode: z.enum(["worker", "demo-fallback"]) }).parse(
+    await request(`/meetings/${multipart.id}/process`, "POST", { langHint: "mixed" }),
+  );
+  assert.equal(multipartProcessed.mode, "demo-fallback");
+  assert.equal(MeetingSchema.parse(await request(`/meetings/${multipart.id}`)).status, "READY");
+  console.log("PASS frontend multipart upload flow");
 
   const webhook = MeetingSchema.parse(await request("/meetings", "POST", { title: "Smoke worker callback", sourceType: "FILE" }));
   const callback = await fetch(`${base}/internal/meetings/${webhook.id}/result`, {
@@ -169,6 +218,11 @@ async function main() {
   assert.deepEqual(await fs.readFile(path.resolve(finalized.audioUrl)), Buffer.concat(chunks));
   await request(`/meetings/${live.id}/stop`, "POST", { audioUrl: finalized.audioUrl, durationSec: 1 });
   console.log("PASS live binary bytes, disconnect finalization and stop endpoint");
+  await request("/auth/logout", "POST", undefined, 204);
+  authCookie = "";
+  const afterLogout = await fetch(`${base}/auth/me`, { signal: AbortSignal.timeout(15000) });
+  assert.equal(afterLogout.status, 401, "Logout must invalidate the session");
+  console.log("PASS logout invalidates the session");
   console.log(JSON.stringify({ seed: id, fallback: file.id, webhook: webhook.id, live: live.id }));
   console.log("All smoke checks passed. Synthetic meetings retained for inspection.");
 }

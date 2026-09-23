@@ -5,10 +5,14 @@ import { Download, FileText, Printer } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { apiUrl } from "@/lib/api";
+import { USE_MOCKS } from "./api";
+import { useCreateExport } from "./hooks";
 import type { MeetingView } from "./types";
 
 export function ExportControls({ meeting }: { meeting: MeetingView }) {
   const [open, setOpen] = useState(false);
+  const createExport = useCreateExport();
   const exportDocx = async () => {
     const document = new Document({ sections: [{ children: [
       new Paragraph({ text: "Протокол совещания", heading: HeadingLevel.TITLE }),
@@ -36,5 +40,25 @@ export function ExportControls({ meeting }: { meeting: MeetingView }) {
     toast.success("DOCX сформирован");
   };
 
-  return <div className="export-wrap"><Button variant="secondary" onClick={() => setOpen((value) => !value)} aria-expanded={open}><Download size={18} />Экспорт</Button>{open && <div className="export-menu"><button onClick={exportDocx}><FileText size={18} /><span><strong>Скачать DOCX</strong><small>Редактируемый протокол</small></span></button><button onClick={() => { setOpen(false); window.print(); }}><Printer size={18} /><span><strong>Печать / PDF</strong><small>Сохранить через диалог печати</small></span></button></div>}</div>;
+  const exportFromServer = async (format: "DOCX" | "PDF") => {
+    try {
+      const result = await createExport.mutateAsync({ meetingId: meeting.id, format });
+      const anchor = window.document.createElement("a");
+      anchor.href = apiUrl(`/exports/${result.id}/download`);
+      anchor.download = `Протокол-${meeting.id}.${result.format.toLowerCase()}`;
+      window.document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setOpen(false);
+      if (format === "PDF" && result.format !== "PDF") {
+        toast.info("PDF-конвертер недоступен — скачан DOCX");
+      } else {
+        toast.success(`${result.format} сформирован`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось сформировать файл");
+    }
+  };
+
+  return <div className="export-wrap"><Button variant="secondary" onClick={() => setOpen((value) => !value)} aria-expanded={open}><Download size={18} />Экспорт</Button>{open && <div className="export-menu"><button disabled={createExport.isPending} onClick={() => { if (USE_MOCKS) void exportDocx(); else void exportFromServer("DOCX"); }}><FileText size={18} /><span><strong>Скачать DOCX</strong><small>Редактируемый протокол</small></span></button><button disabled={createExport.isPending} onClick={() => { if (USE_MOCKS) { setOpen(false); window.print(); } else void exportFromServer("PDF"); }}><Printer size={18} /><span><strong>Скачать PDF</strong><small>{USE_MOCKS ? "Сохранить через диалог печати" : "Готовый файл с сервера"}</small></span></button></div>}</div>;
 }

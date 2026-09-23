@@ -68,6 +68,7 @@ export function serializeTask(t: Task) {
     dueDate: toIso(t.dueDate),
     dueRaw: t.dueRaw,
     status: t.status,
+    priority: t.priority,
     sourceUtteranceId: t.sourceUtteranceId,
     createdAt: t.createdAt.toISOString(),
   };

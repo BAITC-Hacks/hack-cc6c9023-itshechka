@@ -11,6 +11,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { ConflictError, NotFoundError, ValidationError } from "../../common/api-error";
 import { serializeMeeting } from "../../common/serialize";
 import type { Env } from "../../config/env.schema";
+import type { Env } from "../../config/env.schema";
 
 @Injectable()
 export class MeetingsService {
@@ -33,6 +34,7 @@ export class MeetingsService {
     const [rows, total] = await Promise.all([
       this.prisma.meeting.findMany({
         where,
+        include: { _count: { select: { participants: true, tasks: true } } },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * limit,
         take: limit,
@@ -40,7 +42,11 @@ export class MeetingsService {
       this.prisma.meeting.count({ where }),
     ]);
     return {
-      data: rows.map(serializeMeeting),
+      data: rows.map((meeting) => ({
+        ...serializeMeeting(meeting),
+        participantCount: meeting._count.participants,
+        taskCount: meeting._count.tasks,
+      })),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
     };
   }

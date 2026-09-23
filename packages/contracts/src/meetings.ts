@@ -27,6 +27,8 @@ export const MeetingSchema = z.object({
   status: MeetingStatusSchema,
   audioUrl: z.string().nullable(),
   durationSec: z.number().int().nullable(),
+  participantCount: z.number().int().nonnegative().optional(),
+  taskCount: z.number().int().nonnegative().optional(),
   createdAt: z.string(), // ISO 8601 UTC
 });
 export type Meeting = z.infer<typeof MeetingSchema>;

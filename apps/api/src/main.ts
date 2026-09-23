@@ -10,8 +10,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService<Env, true>);
 
-  // Swagger set up BEFORE the global prefix so it stays reachable at /api/docs
-  // instead of /api/v1/api/docs.
+  app.setGlobalPrefix("api/v1");
+
+  // Include the REST prefix in operation paths; Swagger UI stays at /api/docs.
   const swaggerDoc = SwaggerModule.createDocument(
     app,
     new DocumentBuilder()
@@ -21,8 +22,6 @@ async function bootstrap() {
       .build(),
   );
   SwaggerModule.setup("api/docs", app, swaggerDoc);
-
-  app.setGlobalPrefix("api/v1", { exclude: ["api/docs", "api/docs-json"] });
 
   app.enableCors({
     origin: config.get("FRONTEND_URL", { infer: true }),

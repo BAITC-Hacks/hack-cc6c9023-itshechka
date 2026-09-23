@@ -54,16 +54,18 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!meetingId) return;
 
     const stream = this.streams.get(meetingId);
-    stream?.end();
     this.streams.delete(meetingId);
 
     const filePath = this.filesByMeeting.get(meetingId);
     this.filesByMeeting.delete(meetingId);
-    if (!filePath) return;
+    if (!filePath || !stream) return;
 
-    this.meetings
-      .stopLive(meetingId, filePath)
-      .then(() => this.logger.log(`Live stream stopped for meeting ${meetingId}, saved to ${filePath}`))
-      .catch((err) => this.logger.error(`Failed to finalize live meeting ${meetingId}`, err));
+    // UPLOADED must only become visible after all buffered chunks are written.
+    stream.end(() => {
+      this.meetings
+        .stopLive(meetingId, filePath)
+        .then(() => this.logger.log(`Live stream stopped for meeting ${meetingId}, saved to ${filePath}`))
+        .catch((err) => this.logger.error(`Failed to finalize live meeting ${meetingId}`, err));
+    });
   }
 }

@@ -97,7 +97,7 @@ export class ExportsService {
     }
 
     const exportRecord = await this.prisma.export.create({
-      data: { meetingId, format, fileUrl },
+      data: { meetingId, format: fileUrl.endsWith(".pdf") ? "PDF" : "DOCX", fileUrl },
     });
     return serializeExport(exportRecord);
   }
@@ -106,7 +106,9 @@ export class ExportsService {
     try {
       // Требует libreoffice (soffice) на хосте, как и docx-skill в этом окружении.
       await execFileAsync("soffice", ["--headless", "--convert-to", "pdf", "--outdir", dir, docxPath]);
-      return docxPath.replace(/\.docx$/, ".pdf");
+      const pdfPath = docxPath.replace(/\.docx$/, ".pdf");
+      if (!fs.existsSync(pdfPath)) throw new Error("soffice did not produce a PDF");
+      return pdfPath;
     } catch (err) {
       this.logger.warn(`PDF conversion failed (soffice not available?): ${(err as Error).message}`);
       // Fallback: отдаём DOCX, если PDF-конвертер недоступен в окружении.
